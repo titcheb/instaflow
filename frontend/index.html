@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#070b14" />
+  <title>InstaFlow — Instagram Reel Downloader</title>
+  <style>
+    :root{--bg:#070b14;--panel:#0d1423;--panel2:#111a2d;--text:#f6f8fb;--muted:#91a0b8;--accent:#7c5cff;--accent2:#23d5d5;--danger:#ff6376;--line:rgba(255,255,255,.08)}
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:radial-gradient(circle at 20% 10%,rgba(124,92,255,.14),transparent 35%),radial-gradient(circle at 80% 0,rgba(35,213,213,.10),transparent 30%),var(--bg);color:var(--text);min-height:100vh}
+    .wrap{max-width:980px;margin:0 auto;padding:32px 20px 64px}.nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:72px}.brand{display:flex;align-items:center;gap:12px;font-weight:800;letter-spacing:-.03em;font-size:20px}.logo{width:34px;height:34px;border-radius:11px;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 0 30px rgba(124,92,255,.35)}.badge{font-size:12px;color:#c7d0df;border:1px solid var(--line);padding:8px 11px;border-radius:999px;background:rgba(255,255,255,.03)}
+    .hero{text-align:center;max-width:780px;margin:0 auto}.hero h1{font-size:clamp(40px,7vw,72px);line-height:.98;letter-spacing:-.055em;margin:0 0 20px}.hero p{color:var(--muted);font-size:18px;line-height:1.6;margin:0 auto 34px;max-width:650px}
+    .card{background:linear-gradient(180deg,rgba(17,26,45,.92),rgba(11,17,30,.92));border:1px solid var(--line);border-radius:24px;padding:18px;box-shadow:0 24px 70px rgba(0,0,0,.35);backdrop-filter:blur(14px)}
+    .form{display:grid;grid-template-columns:1fr auto;gap:12px}.input{width:100%;border:1px solid var(--line);outline:none;background:#080e19;color:var(--text);font-size:16px;padding:17px 18px;border-radius:16px;transition:.2s}.input:focus{border-color:rgba(124,92,255,.65);box-shadow:0 0 0 4px rgba(124,92,255,.10)}.btn{border:0;border-radius:16px;padding:0 24px;min-height:56px;font-weight:800;font-size:15px;color:white;background:linear-gradient(135deg,var(--accent),#5f8cff);cursor:pointer;box-shadow:0 12px 30px rgba(92,90,255,.28)}.btn:disabled{opacity:.55;cursor:not-allowed}.hint{font-size:13px;color:var(--muted);margin:12px 4px 0;text-align:left}
+    .status{margin-top:18px;display:none;padding:14px 16px;border-radius:14px;font-size:14px;text-align:left;border:1px solid var(--line);background:rgba(255,255,255,.03)}.status.show{display:block}.status.error{color:#ffd7dc;border-color:rgba(255,99,118,.28);background:rgba(255,99,118,.08)}
+    .result{margin-top:22px;display:none;text-align:left}.result.show{display:block}.media{display:grid;grid-template-columns:220px 1fr;gap:22px;align-items:stretch}.thumb{background:#060a12;border:1px solid var(--line);border-radius:18px;overflow:hidden;min-height:240px}.thumb img{width:100%;height:100%;object-fit:cover;display:block}.info{display:flex;flex-direction:column;justify-content:center}.eyebrow{color:var(--accent2);font-size:12px;text-transform:uppercase;letter-spacing:.12em;font-weight:800}.title{font-size:26px;line-height:1.2;letter-spacing:-.025em;margin:8px 0 12px}.meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:22px}.pill{font-size:12px;color:#c6d0df;padding:7px 10px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.03)}.download{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;width:max-content;min-width:180px;min-height:50px;padding:0 18px;border-radius:14px;font-weight:800;color:#071018;background:linear-gradient(135deg,#83fff2,#77e1ff)}
+    .foot{text-align:center;color:#607089;font-size:12px;margin-top:26px}.spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.25);border-top-color:white;border-radius:50%;display:inline-block;vertical-align:-3px;margin-right:8px;animation:spin .75s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+    @media(max-width:720px){.nav{margin-bottom:48px}.form{grid-template-columns:1fr}.btn{width:100%}.media{grid-template-columns:1fr}.thumb{max-height:440px}.hero h1{font-size:46px}.card{padding:14px}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <nav class="nav">
+      <div class="brand"><span class="logo"></span>InstaFlow</div>
+      <span class="badge">Public media only</span>
+    </nav>
+
+    <section class="hero">
+      <h1>Download Instagram Reels in seconds.</h1>
+      <p>Paste a public Instagram Reel or video post link. InstaFlow resolves the media securely through its own backend and prepares the file for download.</p>
+
+      <div class="card">
+        <form id="form" class="form">
+          <input id="url" class="input" type="url" inputmode="url" autocomplete="off" placeholder="https://www.instagram.com/reel/..." required />
+          <button id="submit" class="btn" type="submit">Get video</button>
+        </form>
+        <div class="hint">Supports public Instagram Reel, Post and TV video URLs.</div>
+        <div id="status" class="status"></div>
+
+        <div id="result" class="result">
+          <div class="media">
+            <div class="thumb"><img id="thumb" alt="Instagram video preview" /></div>
+            <div class="info">
+              <div class="eyebrow">Instagram video</div>
+              <div id="title" class="title">Instagram video</div>
+              <div id="meta" class="meta"></div>
+              <a id="download" class="download" href="#" rel="nofollow">Download MP4</a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="foot">Only download media you own or are authorized to save.</div>
+    </section>
+  </main>
+
+  <script>
+    const API_BASE = 'https://instaflow-api-se8k.onrender.com';
+    const form = document.getElementById('form');
+    const input = document.getElementById('url');
+    const submit = document.getElementById('submit');
+    const status = document.getElementById('status');
+    const result = document.getElementById('result');
+    const thumb = document.getElementById('thumb');
+    const title = document.getElementById('title');
+    const meta = document.getElementById('meta');
+    const download = document.getElementById('download');
+
+    function setStatus(message, isError=false){
+      status.textContent = message || '';
+      status.className = 'status' + (message ? ' show' : '') + (isError ? ' error' : '');
+    }
+
+    function formatDuration(value){
+      const n = Number(value || 0);
+      if(!n) return null;
+      const m = Math.floor(n/60), s = Math.floor(n%60);
+      return `${m}:${String(s).padStart(2,'0')}`;
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const url = input.value.trim();
+      if(!url) return;
+
+      result.classList.remove('show');
+      setStatus('Resolving video…');
+      submit.disabled = true;
+      submit.innerHTML = '<span class="spinner"></span>Resolving';
+
+      try{
+        const response = await fetch(`${API_BASE}/api/resolve?url=${encodeURIComponent(url)}`, { method:'GET' });
+        const data = await response.json().catch(() => ({}));
+        if(!response.ok || !data.ok){
+          throw new Error(data.detail || data.error || 'Unable to resolve this Instagram video.');
+        }
+
+        title.textContent = data.title || 'Instagram video';
+        thumb.src = data.thumbnail || '';
+        thumb.style.display = data.thumbnail ? 'block' : 'none';
+
+        const items = [];
+        const duration = formatDuration(data.duration);
+        if(duration) items.push(duration);
+        if(data.width && data.height) items.push(`${data.width}×${data.height}`);
+        if(data.format) items.push(data.format);
+        if(data.uploader) items.push(data.uploader);
+        meta.innerHTML = items.map(x => `<span class="pill">${String(x).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</span>`).join('');
+
+        const relativeDownload = data.downloadUrl || `/api/download?url=${encodeURIComponent(url)}`;
+        download.href = relativeDownload.startsWith('http') ? relativeDownload : API_BASE + relativeDownload;
+        result.classList.add('show');
+        setStatus('Video ready. Tap Download MP4.');
+      }catch(error){
+        setStatus(error.message || 'Something went wrong.', true);
+      }finally{
+        submit.disabled = false;
+        submit.textContent = 'Get video';
+      }
+    });
+  </script>
+</body>
+</html>
