@@ -1,6 +1,7 @@
 import base64
-import os
+import json
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -8,23 +9,26 @@ import sys
 import tempfile
 import threading
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 app = FastAPI(docs_url=None, redoc_url=None)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[os.environ.get("ALLOWED_ORIGINS", "https://instaflow-downloader.astrit-s-bunjaku.chatgpt.site")],
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type"],
     expose_headers=["Content-Disposition"],
 )
 
 slots = threading.BoundedSemaphore(2)
+resolve_slots = threading.BoundedSemaphore(4)
 MAX_BYTES = 100 * 1024 * 1024
+MAX_DURATION = 600
 DEFAULT_IG_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -33,9 +37,13 @@ DEFAULT_IG_UA = (
 IG_UA = os.environ.get("INSTAGRAM_USER_AGENT", DEFAULT_IG_UA).strip() or DEFAULT_IG_UA
 
 
+class ResolveBody(BaseModel):
+    url: str
+
+
 def canonical_url(value):
     try:
-        parsed = urlsplit(value)
+        parsed = urlsplit(str(value or "").strip())
         valid = (
             parsed.scheme == "https"
             and parsed.hostname in {"instagram.com", "www.instagram.com"}
@@ -46,10 +54,11 @@ def canonical_url(value):
     except ValueError:
         valid = False
 
-    if not valid or not re.fullmatch(r"/(?:reel|p|tv)/[A-Za-z0-9_-]+/?", parsed.path):
+    if not valid or not re.fullmatch(r"/(?:reel|reels|p|tv)/[A-Za-z0-9_-]+/?", parsed.path):
         raise HTTPException(400, "Paste a public Instagram Reel or video post link.")
 
-    return "https://www.instagram.com" + parsed.path.rstrip("/") + "/"
+    path = parsed.path.replace("/reels/", "/reel/", 1)
+    return "https://www.instagram.com" + path.rstrip("/") + "/"
 
 
 def normalize_cookie_text(text):
@@ -83,7 +92,6 @@ def instagram_cookie_text():
 
     csrf_token = os.environ.get("INSTAGRAM_CSRFTOKEN", "").strip()
     ds_user_id = os.environ.get("INSTAGRAM_DS_USER_ID", "").strip()
-    # Session cookies are intentionally written only into the per-request temp directory.
     lines = [
         "# Netscape HTTP Cookie File",
         f".instagram.com\tTRUE\t/\tTRUE\t2147483647\tsessionid\t{session_id}",
@@ -95,18 +103,162 @@ def instagram_cookie_text():
     return "\n".join(lines) + "\n"
 
 
+def prepare_cookie_file(folder):
+    cookie_text = instagram_cookie_text()
+    if not cookie_text:
+        return None
+
+    cookie_path = Path(folder) / "instagram-cookies.txt"
+    cookie_path.write_text(cookie_text, encoding="utf-8")
+    try:
+        os.chmod(cookie_path, 0o600)
+    except OSError:
+        pass
+    return cookie_path
+
+
+def common_ytdlp_args(cookie_path=None):
+    args = [
+        sys.executable,
+        "-m",
+        "yt_dlp",
+        "--ignore-config",
+        "--no-cache-dir",
+        "--no-playlist",
+        "--playlist-items",
+        "1",
+        "--no-warnings",
+        "--quiet",
+        "--socket-timeout",
+        "20",
+        "--retries",
+        "3",
+        "--fragment-retries",
+        "3",
+        "--extractor-retries",
+        "3",
+        "--sleep-requests",
+        "1",
+        "--user-agent",
+        IG_UA,
+        "--add-header",
+        "Referer:https://www.instagram.com/",
+        "--add-header",
+        "Accept-Language:en-US,en;q=0.9",
+    ]
+    if cookie_path:
+        args.extend(["--cookies", str(cookie_path)])
+    return args
+
+
+def diagnostic_text(result):
+    diagnostic = result.stderr.decode("utf-8", errors="replace")[-5000:]
+    return re.sub(r"https?://[^\s]+", "[URL]", diagnostic)
+
+
+def clean_text(value, limit=160):
+    value = re.sub(r"\s+", " ", str(value or "")).strip()
+    return value[:limit]
+
+
+def resolve_instagram(target):
+    if not resolve_slots.acquire(blocking=False):
+        raise HTTPException(429, "The resolver is busy. Please try again shortly.")
+
+    folder = tempfile.mkdtemp(prefix="instaflow-resolve-")
+    try:
+        cookie_path = prepare_cookie_file(folder)
+        command = common_ytdlp_args(cookie_path)
+        command.extend([
+            "--skip-download",
+            "--dump-single-json",
+            "-f",
+            "best[ext=mp4]/best",
+            "--",
+            target,
+        ])
+
+        result = subprocess.run(command, capture_output=True, timeout=60)
+        if result.returncode:
+            logging.getLogger("uvicorn.error").error(
+                "yt-dlp resolve failed (exit %s, auth=%s): %s",
+                result.returncode,
+                bool(cookie_path),
+                diagnostic_text(result),
+            )
+            raise HTTPException(
+                422,
+                "Instagram could not resolve this public video. The post may require login, be private, deleted, or temporarily rate-limited.",
+            )
+
+        try:
+            info = json.loads(result.stdout.decode("utf-8", errors="replace"))
+        except json.JSONDecodeError:
+            raise HTTPException(502, "Instagram returned an invalid media response.")
+
+        if info.get("_type") == "playlist" or info.get("entries"):
+            entries = [entry for entry in (info.get("entries") or []) if entry]
+            if not entries:
+                raise HTTPException(422, "No downloadable media was found in this post.")
+            info = entries[0]
+
+        duration = info.get("duration")
+        if duration and float(duration) > MAX_DURATION:
+            raise HTTPException(413, "Video exceeds the 10 minute limit.")
+
+        availability = str(info.get("availability") or "public").lower()
+        if availability in {"private", "needs_auth", "premium_only", "subscriber_only"}:
+            raise HTTPException(403, "Private or restricted Instagram content is not supported.")
+
+        title = clean_text(info.get("title") or info.get("description") or "Instagram video")
+        uploader = clean_text(info.get("uploader") or info.get("channel") or info.get("uploader_id") or "Instagram", 80)
+        thumbnail = info.get("thumbnail") if str(info.get("thumbnail") or "").startswith("http") else None
+
+        return {
+            "ok": True,
+            "platform": "instagram",
+            "type": "video",
+            "id": info.get("id"),
+            "title": title,
+            "uploader": uploader,
+            "thumbnail": thumbnail,
+            "duration": duration,
+            "width": info.get("width"),
+            "height": info.get("height"),
+            "ext": info.get("ext") or "mp4",
+            "format": info.get("format_note") or info.get("format") or "Best available",
+            "sourceUrl": target,
+            "downloadUrl": f"/api/download?url={quote(target, safe='')}",
+        }
+    finally:
+        resolve_slots.release()
+        shutil.rmtree(folder, ignore_errors=True)
+
+
 @app.get("/")
 @app.get("/health")
 def health():
     return {
         "ok": True,
-        "service": "instaflow-yt-dlp",
+        "service": "instaflow-backend",
+        "version": "2.0.0",
         "instagramAuthConfigured": bool(
             os.environ.get("INSTAGRAM_COOKIES_B64")
             or os.environ.get("INSTAGRAM_COOKIES")
             or os.environ.get("INSTAGRAM_SESSIONID")
         ),
+        "endpoints": ["/api/resolve", "/api/download"],
     }
+
+
+@app.get("/api/resolve")
+def resolve_get(url: str):
+    return resolve_instagram(canonical_url(url))
+
+
+@app.post("/api/resolve")
+def resolve_post(body: ResolveBody):
+    return resolve_instagram(canonical_url(body.url))
 
 
 @app.get("/api/download")
@@ -116,77 +268,37 @@ def download(url: str, cleanup: BackgroundTasks):
     if not slots.acquire(blocking=False):
         raise HTTPException(429, "The downloader is busy. Please try again shortly.")
 
-    folder = tempfile.mkdtemp(prefix="instaflow-")
+    folder = tempfile.mkdtemp(prefix="instaflow-download-")
     handed_off = False
 
     try:
-        cookie_text = instagram_cookie_text()
-        cookie_path = None
-        if cookie_text:
-            cookie_path = Path(folder) / "instagram-cookies.txt"
-            cookie_path.write_text(cookie_text, encoding="utf-8")
-            try:
-                os.chmod(cookie_path, 0o600)
-            except OSError:
-                pass
-
-        command = [
-            sys.executable,
-            "-m",
-            "yt_dlp",
-            "--ignore-config",
-            "--no-cache-dir",
-            "--no-playlist",
-            "--playlist-items",
-            "1",
+        cookie_path = prepare_cookie_file(folder)
+        command = common_ytdlp_args(cookie_path)
+        command.extend([
             "--no-part",
-            "--no-warnings",
-            "--quiet",
-            "--socket-timeout",
-            "20",
-            "--retries",
-            "3",
-            "--fragment-retries",
-            "3",
-            "--extractor-retries",
-            "3",
-            "--sleep-requests",
-            "1",
-            "--user-agent",
-            IG_UA,
-            "--add-header",
-            "Referer:https://www.instagram.com/",
-            "--add-header",
-            "Accept-Language:en-US,en;q=0.9",
             "--max-filesize",
             str(MAX_BYTES),
             "--match-filter",
-            "duration <= 600",
+            f"duration <= {MAX_DURATION}",
             "-f",
             "best[ext=mp4]/best",
             "-o",
             str(Path(folder) / "instagram.%(ext)s"),
-        ]
-
-        if cookie_path:
-            command.extend(["--cookies", str(cookie_path)])
-
-        command.extend(["--", target])
+            "--",
+            target,
+        ])
 
         result = subprocess.run(command, capture_output=True, timeout=120)
-
         if result.returncode:
-            diagnostic = result.stderr.decode("utf-8", errors="replace")[-4000:]
-            diagnostic = re.sub(r"https?://[^\s]+", "[URL]", diagnostic)
             logging.getLogger("uvicorn.error").error(
-                "yt-dlp failed (exit %s, auth=%s): %s",
+                "yt-dlp download failed (exit %s, auth=%s): %s",
                 result.returncode,
                 bool(cookie_path),
-                diagnostic,
+                diagnostic_text(result),
             )
             raise HTTPException(
                 422,
-                "Instagram could not provide this video. If it works in NeonFetch, configure the same Instagram cookies on InstaFlow.",
+                "Instagram could not provide this video. The post may require login, be private, deleted, or temporarily rate-limited.",
             )
 
         candidates = [
