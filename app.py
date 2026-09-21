@@ -1,4 +1,5 @@
 import os
+import logging
 import re
 import shutil
 import subprocess
@@ -59,6 +60,9 @@ def download(url: str, cleanup: BackgroundTasks):
         ]
         result = subprocess.run(command, capture_output=True, timeout=90)
         if result.returncode:
+            diagnostic = result.stderr.decode("utf-8", errors="replace")[-4000:]
+            diagnostic = re.sub(r"https?://[^\\s]+", "[URL]", diagnostic)
+            logging.getLogger("uvicorn.error").error("yt-dlp failed (exit %s): %s", result.returncode, diagnostic)
             raise HTTPException(422, "Instagram could not provide this video. It may require login or be temporarily unavailable.")
         path = Path(folder) / "instagram.mp4"
         if not path.is_file():
