@@ -9,11 +9,13 @@ import sys
 import tempfile
 import threading
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
+from urllib.request import Request, urlopen
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 
 app = FastAPI(docs_url=None, redoc_url=None)
@@ -29,6 +31,7 @@ slots = threading.BoundedSemaphore(2)
 resolve_slots = threading.BoundedSemaphore(4)
 MAX_BYTES = 100 * 1024 * 1024
 MAX_DURATION = 600
+NEONFETCH_BASE = os.environ.get("NEONFETCH_BASE", "https://neonfetch-x.onrender.com").rstrip("/")
 DEFAULT_IG_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -161,6 +164,68 @@ def clean_text(value, limit=160):
     return value[:limit]
 
 
+def resolve_via_neonfetch(target):
+    payload = json.dumps({"url": target}).encode("utf-8")
+    request = Request(
+        f"{NEONFETCH_BASE}/api/inspect",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": IG_UA,
+        },
+        method="POST",
+    )
+
+    try:
+        with urlopen(request, timeout=55) as response:
+            data = json.loads(response.read().decode("utf-8", errors="replace"))
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")[:1000]
+        logging.getLogger("uvicorn.error").error(
+            "NeonFetch fallback HTTP %s: %s", exc.code, body
+        )
+        raise HTTPException(502, "Instagram fallback could not resolve this video.")
+    except (URLError, TimeoutError, json.JSONDecodeError) as exc:
+        logging.getLogger("uvicorn.error").error("NeonFetch fallback failed: %s", exc)
+        raise HTTPException(502, "Instagram fallback is temporarily unavailable.")
+
+    if not data.get("ok"):
+        raise HTTPException(422, clean_text(data.get("error") or "Instagram could not resolve this video.", 220))
+
+    formats = [
+        item for item in (data.get("formats") or [])
+        if item.get("type") == "video" and item.get("downloadUrl")
+    ]
+    if not formats:
+        raise HTTPException(422, "No downloadable video format was found.")
+
+    chosen = formats[0]
+    download_url = str(chosen.get("downloadUrl") or "")
+    if download_url.startswith("/"):
+        download_url = NEONFETCH_BASE + download_url
+    elif not download_url.startswith(NEONFETCH_BASE + "/"):
+        raise HTTPException(502, "Fallback returned an unexpected download URL.")
+
+    return {
+        "ok": True,
+        "platform": "instagram",
+        "type": "video",
+        "id": None,
+        "title": clean_text(data.get("title") or "Instagram video"),
+        "uploader": clean_text(data.get("uploader") or "Instagram", 80),
+        "thumbnail": data.get("thumbnail") if str(data.get("thumbnail") or "").startswith("http") else None,
+        "duration": data.get("duration"),
+        "width": None,
+        "height": None,
+        "ext": chosen.get("ext") or "mp4",
+        "format": chosen.get("label") or chosen.get("quality") or "Best available",
+        "sourceUrl": target,
+        "downloadUrl": download_url,
+        "engine": "neonfetch-fallback",
+    }
+
+
 def resolve_instagram(target):
     if not resolve_slots.acquire(blocking=False):
         raise HTTPException(429, "The resolver is busy. Please try again shortly.")
@@ -180,26 +245,26 @@ def resolve_instagram(target):
 
         result = subprocess.run(command, capture_output=True, timeout=60)
         if result.returncode:
+            diagnostic = diagnostic_text(result)
             logging.getLogger("uvicorn.error").error(
                 "yt-dlp resolve failed (exit %s, auth=%s): %s",
                 result.returncode,
                 bool(cookie_path),
-                diagnostic_text(result),
+                diagnostic,
             )
-            raise HTTPException(
-                422,
-                "Instagram could not resolve this public video. The post may require login, be private, deleted, or temporarily rate-limited.",
-            )
+            logging.getLogger("uvicorn.error").info("Trying NeonFetch fallback for Instagram resolve.")
+            return resolve_via_neonfetch(target)
 
         try:
             info = json.loads(result.stdout.decode("utf-8", errors="replace"))
         except json.JSONDecodeError:
-            raise HTTPException(502, "Instagram returned an invalid media response.")
+            logging.getLogger("uvicorn.error").info("Invalid local metadata; trying NeonFetch fallback.")
+            return resolve_via_neonfetch(target)
 
         if info.get("_type") == "playlist" or info.get("entries"):
             entries = [entry for entry in (info.get("entries") or []) if entry]
             if not entries:
-                raise HTTPException(422, "No downloadable media was found in this post.")
+                return resolve_via_neonfetch(target)
             info = entries[0]
 
         duration = info.get("duration")
@@ -229,6 +294,7 @@ def resolve_instagram(target):
             "format": info.get("format_note") or info.get("format") or "Best available",
             "sourceUrl": target,
             "downloadUrl": f"/api/download?url={quote(target, safe='')}",
+            "engine": "instaflow-local",
         }
     finally:
         resolve_slots.release()
@@ -241,12 +307,13 @@ def health():
     return {
         "ok": True,
         "service": "instaflow-backend",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "instagramAuthConfigured": bool(
             os.environ.get("INSTAGRAM_COOKIES_B64")
             or os.environ.get("INSTAGRAM_COOKIES")
             or os.environ.get("INSTAGRAM_SESSIONID")
         ),
+        "neonfetchFallback": True,
         "endpoints": ["/api/resolve", "/api/download"],
     }
 
@@ -296,10 +363,8 @@ def download(url: str, cleanup: BackgroundTasks):
                 bool(cookie_path),
                 diagnostic_text(result),
             )
-            raise HTTPException(
-                422,
-                "Instagram could not provide this video. The post may require login, be private, deleted, or temporarily rate-limited.",
-            )
+            fallback = resolve_via_neonfetch(target)
+            return RedirectResponse(fallback["downloadUrl"], status_code=307)
 
         candidates = [
             p
@@ -307,7 +372,8 @@ def download(url: str, cleanup: BackgroundTasks):
             if p.is_file() and p.name != "instagram-cookies.txt" and not p.name.endswith(".part")
         ]
         if not candidates:
-            raise HTTPException(422, "No supported video found. Use a video under 10 minutes and 100 MB.")
+            fallback = resolve_via_neonfetch(target)
+            return RedirectResponse(fallback["downloadUrl"], status_code=307)
 
         path = max(candidates, key=lambda p: p.stat().st_size)
         if path.stat().st_size > MAX_BYTES:
@@ -326,7 +392,8 @@ def download(url: str, cleanup: BackgroundTasks):
         )
 
     except subprocess.TimeoutExpired:
-        raise HTTPException(504, "Instagram took too long to respond. Try again later.")
+        fallback = resolve_via_neonfetch(target)
+        return RedirectResponse(fallback["downloadUrl"], status_code=307)
     finally:
         slots.release()
         if not handed_off:
