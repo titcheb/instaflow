@@ -6,10 +6,13 @@ SDK="$ROOT/sdk"
 GRADLE_HOME_DIR="$ROOT/gradle"
 mkdir -p "$ROOT" "$SDK" "$GRADLE_HOME_DIR" dist
 
-# Restore the Android source tree stored in the branch.
+# Restore the Android source tree from verified base64 chunks.
 rm -rf android
-base64 -d android-src.tar.gz.b64 > "$ROOT/nexa-android.tar.gz"
+cat android-src.part01 android-src.part02 android-src.part03 android-src.part04 android-src.part05 android-src.part06 android-src.part07 > "$ROOT/android-src.b64"
+base64 -d "$ROOT/android-src.b64" > "$ROOT/nexa-android.tar.gz"
+gzip -t "$ROOT/nexa-android.tar.gz"
 tar -xzf "$ROOT/nexa-android.tar.gz"
+test -f android/app/src/main/java/se/nexa/iptv/MainActivity.java
 
 # Render's Node image may not include Java. Install a local Temurin JDK 17 when needed.
 if ! command -v java >/dev/null 2>&1; then
