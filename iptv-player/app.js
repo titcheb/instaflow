@@ -19,7 +19,7 @@
   const state = {
     channels: [], categories: [], activeView: 'all', activeCategory: null, search: '', current: null,
     favorites: new Set(JSON.parse(localStorage.getItem('nexaFavorites') || '[]')),
-    hls: null, playlistUrl: localStorage.getItem('nexaPlaylistUrl') || '', controlsTimer: null
+    hls: null, mpegts: null, playlistUrl: localStorage.getItem('nexaPlaylistUrl') || '', controlsTimer: null
   };
 
   function escapeHtml(value = '') {
@@ -128,7 +128,11 @@
   }
 
   function destroyPlayer() {
-    if (state.hls) { state.hls.destroy(); state.hls = null; }
+    if (state.hls) { try { state.hls.destroy(); } catch {} state.hls = null; }
+    if (state.mpegts) {
+      try { state.mpegts.pause(); state.mpegts.unload(); state.mpegts.detachMediaElement(); state.mpegts.destroy(); } catch {}
+      state.mpegts = null;
+    }
     els.video.pause();
     els.video.removeAttribute('src');
     els.video.load();
@@ -150,11 +154,37 @@
     els.streamStatus.textContent = 'Connecting';
 
     const url = channel.url;
-    const isHls = /\.m3u8($|\?)/i.test(url) || channel.type === 'hls';
-    els.streamType.textContent = isHls ? 'HLS' : 'STREAM';
+    const isHls = channel.type === 'hls';
+    const isMpegTs = channel.type === 'mpegts';
+    els.streamType.textContent = isHls ? 'HLS' : (isMpegTs ? 'MPEG-TS' : 'STREAM');
 
     try {
-      if (isHls && window.Hls?.isSupported()) {
+      if (isMpegTs && window.mpegts?.isSupported?.()) {
+        const player = mpegts.createPlayer({
+          type: 'mpegts',
+          isLive: true,
+          url,
+          hasAudio: true,
+          hasVideo: true
+        }, {
+          enableWorker: true,
+          enableStashBuffer: false,
+          lazyLoad: false,
+          liveBufferLatencyChasing: true,
+          liveBufferLatencyMaxLatency: 4,
+          liveBufferLatencyMinRemain: 1
+        });
+        state.mpegts = player;
+        player.attachMediaElement(els.video);
+        player.load();
+        if (window.mpegts?.Events?.ERROR) {
+          player.on(mpegts.Events.ERROR, (_type, _detail, info) => {
+            const code = info?.code || info?.status || '';
+            showVideoError(`MPEG-TS stream could not be played${code ? ` (HTTP ${code})` : ''}.`);
+          });
+        }
+        await player.play();
+      } else if (isHls && window.Hls?.isSupported()) {
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: true,
@@ -172,7 +202,7 @@
         hls.on(Hls.Events.ERROR, (_event, data) => {
           if (!data.fatal) return;
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-            try { hls.startLoad(); } catch { showVideoError('Network/CORS error. The stream server may not allow browser playback.'); }
+            try { hls.startLoad(); } catch { showVideoError('The stream server could not be reached or rejected the request.'); }
           } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
             try { hls.recoverMediaError(); } catch { showVideoError('The stream format is not supported by this browser.'); }
           } else {
@@ -201,7 +231,7 @@
         els.streamStatus.textContent = 'Tap play';
         toast('Tap the player to start playback');
       } else {
-        showVideoError('Playback failed. The stream may be offline or blocked by CORS.');
+        showVideoError('Playback failed. The stream may be offline or use an unsupported format.');
       }
     }
   }
