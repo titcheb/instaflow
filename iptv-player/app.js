@@ -51,7 +51,7 @@
     setLoading(true);
     els.formError.textContent = '';
     try {
-      const response = await fetch(`/api/playlist?url=${encodeURIComponent(url)}`, { headers: { 'Accept': 'application/json' } });
+      const response = await fetch(`/api/playlist?url=${encodeURIComponent(url)}`, { headers: { 'Accept': 'application/json' }, cache: 'no-store' });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not load this playlist.');
       if (!Array.isArray(data.channels) || !data.channels.length) throw new Error('No playable channels were found in this playlist.');
@@ -153,7 +153,7 @@
     els.playerFavoriteBtn.classList.remove('hidden');
     els.streamStatus.textContent = 'Connecting';
 
-    const url = channel.url;
+    const url = new URL(channel.url, window.location.origin).href;
     const isHls = channel.type === 'hls';
     const isMpegTs = channel.type === 'mpegts';
     els.streamType.textContent = isHls ? 'HLS' : (isMpegTs ? 'MPEG-TS' : 'STREAM');
@@ -164,25 +164,30 @@
           type: 'mpegts',
           isLive: true,
           url,
+          cors: false,
+          withCredentials: false,
           hasAudio: true,
           hasVideo: true
         }, {
-          enableWorker: true,
-          enableStashBuffer: false,
+          enableWorker: false,
+          enableStashBuffer: true,
+          stashInitialSize: 384 * 1024,
           lazyLoad: false,
           liveBufferLatencyChasing: true,
-          liveBufferLatencyMaxLatency: 4,
-          liveBufferLatencyMinRemain: 1
+          liveBufferLatencyMaxLatency: 5,
+          liveBufferLatencyMinRemain: 1.5
         });
         state.mpegts = player;
         player.attachMediaElement(els.video);
-        player.load();
         if (window.mpegts?.Events?.ERROR) {
-          player.on(mpegts.Events.ERROR, (_type, _detail, info) => {
-            const code = info?.code || info?.status || '';
-            showVideoError(`MPEG-TS stream could not be played${code ? ` (HTTP ${code})` : ''}.`);
+          player.on(mpegts.Events.ERROR, (type, detail, info) => {
+            const code = info?.code ?? info?.status;
+            const reason = info?.msg || info?.message || detail || type || 'network error';
+            const suffix = (code !== undefined && code !== null && code !== '') ? ` (HTTP ${code})` : '';
+            showVideoError(`MPEG-TS stream could not be played${suffix}. ${String(reason).slice(0, 120)}`);
           });
         }
+        player.load();
         await player.play();
       } else if (isHls && window.Hls?.isSupported()) {
         const hls = new Hls({
