@@ -51,6 +51,43 @@ function makeId(name, group, url) {
   return crypto.createHash('sha1').update(`${name}|${group}|${url}`).digest('hex').slice(0, 16);
 }
 
+function setHeaderHint(target, key, value) {
+  if (!value) return;
+  const normalized = String(key || '').toLowerCase().replace(/_/g, '-');
+  const clean = String(value).replace(/[\r\n]/g, '').trim();
+  if (!clean) return;
+  if (['user-agent', 'http-user-agent', 'useragent'].includes(normalized)) target.userAgent = clean.slice(0, 350);
+  if (['referer', 'referrer', 'http-referrer', 'http-referer'].includes(normalized)) target.referrer = clean.slice(0, 1200);
+}
+
+function parsePipeOptions(raw) {
+  const out = {};
+  for (const part of raw.split('&')) {
+    const idx = part.indexOf('=');
+    if (idx <= 0) continue;
+    const key = decodeURIComponent(part.slice(0, idx).trim());
+    let value = part.slice(idx + 1).trim();
+    try { value = decodeURIComponent(value); } catch {}
+    setHeaderHint(out, key, value);
+  }
+  return out;
+}
+
+function splitStreamLine(line) {
+  const pipeIndex = line.indexOf('|');
+  if (pipeIndex <= 0) return { urlPart: line, hints: {} };
+  const optionPart = line.slice(pipeIndex + 1);
+  if (!/(?:^|&)(?:user-agent|useragent|referer|referrer)=/i.test(optionPart)) return { urlPart: line, hints: {} };
+  return { urlPart: line.slice(0, pipeIndex), hints: parsePipeOptions(optionPart) };
+}
+
+function buildStreamProxyPath(streamUrl, headers = {}) {
+  const params = new URLSearchParams({ url: streamUrl });
+  if (headers.userAgent) params.set('ua', headers.userAgent);
+  if (headers.referrer) params.set('ref', headers.referrer);
+  return `/api/stream?${params.toString()}`;
+}
+
 function parseM3u(text, baseUrl) {
   const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).map(x => x.trim());
   if (!lines.some(line => line.startsWith('#EXTM3U')) && !lines.some(line => line.startsWith('#EXTINF'))) {
@@ -70,7 +107,8 @@ function parseM3u(text, baseUrl) {
         name: attrs['tvg-name'] || fallbackName || 'Unnamed channel',
         logo: attrs['tvg-logo'] || '',
         group: attrs['group-title'] || 'Other',
-        tvgId: attrs['tvg-id'] || ''
+        tvgId: attrs['tvg-id'] || '',
+        headers: {}
       };
       continue;
     }
@@ -78,20 +116,44 @@ function parseM3u(text, baseUrl) {
       pending.group = line.slice(8).trim() || pending.group;
       continue;
     }
+    if (line.startsWith('#EXTVLCOPT:') && pending) {
+      const option = line.slice(11);
+      const idx = option.indexOf('=');
+      if (idx > 0) setHeaderHint(pending.headers, option.slice(0, idx), option.slice(idx + 1));
+      continue;
+    }
+    if (line.startsWith('#EXTHTTP:') && pending) {
+      try {
+        const obj = JSON.parse(line.slice(9));
+        for (const [key, value] of Object.entries(obj || {})) setHeaderHint(pending.headers, key, value);
+      } catch {}
+      continue;
+    }
     if (line.startsWith('#')) continue;
 
     if (pending) {
+      const { urlPart, hints } = splitStreamLine(line);
+      Object.assign(pending.headers, hints);
       let streamUrl;
-      try { streamUrl = new URL(line, baseUrl).href; } catch { pending = null; continue; }
+      try { streamUrl = new URL(urlPart, baseUrl).href; } catch { pending = null; continue; }
       if (!/^https?:/i.test(streamUrl)) { pending = null; continue; }
-      const type = /\.m3u8($|\?)/i.test(streamUrl) ? 'hls' : 'stream';
+      let type = /\.m3u8(?:$|\?)/i.test(streamUrl) ? 'hls' : (/\.ts(?:$|\?)/i.test(streamUrl) ? 'mpegts' : 'stream');
+      if (type === 'stream') {
+        try {
+          const path = new URL(streamUrl).pathname;
+          if (/\/live\/[^/]+\/[^/]+\/\d+\/?$/i.test(path)) type = 'mpegts';
+        } catch {}
+      }
+      const headers = {};
+      if (pending.headers.userAgent) headers.userAgent = pending.headers.userAgent;
+      if (pending.headers.referrer) headers.referrer = pending.headers.referrer;
       channels.push({
         id: makeId(pending.name, pending.group, streamUrl),
         name: pending.name.slice(0, 180),
         logo: pending.logo.slice(0, 1200),
         group: (pending.group || 'Other').slice(0, 120),
         tvgId: pending.tvgId.slice(0, 160),
-        url: streamUrl,
+        url: buildStreamProxyPath(streamUrl, headers),
         type
       });
       pending = null;
@@ -120,7 +182,7 @@ module.exports = async function handler(req, res) {
       signal: controller.signal,
       redirect: 'follow',
       headers: {
-        'User-Agent': 'NEXA-IPTV-Player/1.0',
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126 Safari/537.36 NEXA-IPTV/1.1',
         'Accept': 'application/x-mpegURL, application/vnd.apple.mpegurl, text/plain, */*'
       }
     }).finally(() => clearTimeout(timer));
@@ -146,3 +208,4 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.parseM3u = parseM3u;
+module.exports.assertPublicUrl = assertPublicUrl;
