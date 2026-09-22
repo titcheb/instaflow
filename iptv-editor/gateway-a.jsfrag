@@ -1,0 +1,30 @@
+import express from 'express';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
+import dns from 'dns/promises';
+import net from 'net';
+import fs from 'fs';
+import path from 'path';
+import http from 'http';
+import https from 'https';
+import { spawn } from 'child_process';
+import { fileURLToPath } from 'url';
+
+const __dirname=path.dirname(fileURLToPath(import.meta.url));
+const app=express();
+const PORT=Number(process.env.PORT||10000);
+const CHILD_PORT=PORT+1;
+const JWT_SECRET=process.env.JWT_SECRET||'nexa-editor-beta-'+crypto.createHash('sha256').update(process.env.RENDER_SERVICE_ID||'local').digest('hex');
+const DATA_DIR=path.join(__dirname,'data');
+const DATA_FILE=path.join(DATA_DIR,'store.json');
+const MAX=25*1024*1024;
+fs.mkdirSync(DATA_DIR,{recursive:true});
+
+let child;
+function readStore(){try{return JSON.parse(fs.readFileSync(DATA_FILE,'utf8'))}catch{return{users:[],playlists:[],channels:[],seq:{user:1,playlist:1,channel:1}}}}
+function writeStore(store){const tmp=DATA_FILE+'.gateway.tmp';fs.writeFileSync(tmp,JSON.stringify(store));fs.renameSync(tmp,DATA_FILE)}
+function normalizeStore(){const s=readStore();s.users=Array.isArray(s.users)?s.users:[];s.playlists=Array.isArray(s.playlists)?s.playlists:[];s.channels=Array.isArray(s.channels)?s.channels:[];s.seq=s.seq||{};const maxima={user:Math.max(0,...s.users.map(x=>+x.id||0)),playlist:Math.max(0,...s.playlists.map(x=>+x.id||0)),channel:Math.max(0,...s.channels.map(x=>+x.id||0))};for(const k of Object.keys(maxima))if(!s.seq[k]||s.seq[k]<=maxima[k])s.seq[k]=maxima[k]+1;s.users.forEach(u=>{if(!u.role)u.role='user';if(typeof u.disabled!=='boolean')u.disabled=false});if(s.users.length&&!s.users.some(u=>u.role==='admin'))[...s.users].sort((a,b)=>(+a.id)-(+b.id))[0].role='admin';writeStore(s)}
+function restartChild(){if(child&&!child.killed)child.kill('SIGTERM');child=spawn(process.execPath,['server.js'],{cwd:__dirname,env:{...process.env,PORT:String(CHILD_PORT)},stdio:'inherit'});child.on('exit',(code,signal)=>{if(signal==='SIGTERM')return;console.error('Editor child exited',code,signal);setTimeout(restartChild,1200)})}
+normalizeStore();restartChild();
+process.on('SIGTERM',()=>{if(child&&!child.killed)child.kill('SIGTERM');process.exit(0)});
