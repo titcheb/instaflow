@@ -1,6 +1,7 @@
 const dns = require('dns').promises;
 const net = require('net');
-const { Readable } = require('stream');
+const http = require('http');
+const https = require('https');
 
 const MAX_MANIFEST_BYTES = 2 * 1024 * 1024;
 const CONNECT_TIMEOUT_MS = 15000;
@@ -32,7 +33,9 @@ async function assertPublicUrl(input) {
   let addresses;
   try { addresses = await dns.lookup(url.hostname, { all: true, verbatim: true }); }
   catch { throw new Error('Stream host could not be resolved.'); }
-  if (!addresses.length || addresses.some(({ address }) => isPrivateIp(address))) throw new Error('Private or local network streams are not allowed.');
+  if (!addresses.length || addresses.some(({ address }) => isPrivateIp(address))) {
+    throw new Error('Private or local network streams are not allowed.');
+  }
   return url;
 }
 
@@ -41,16 +44,39 @@ function cleanHeaderValue(value, max = 500) {
   return value.replace(/[\r\n]/g, '').trim().slice(0, max);
 }
 
-async function fetchValidated(startUrl, options) {
-  let current = await assertPublicUrl(startUrl);
-  for (let i = 0; i <= MAX_REDIRECTS; i++) {
-    const response = await fetch(current, { ...options, redirect: 'manual' });
-    if (![301, 302, 303, 307, 308].includes(response.status)) return { response, finalUrl: current };
-    const location = response.headers.get('location');
-    if (!location) return { response, finalUrl: current };
-    current = await assertPublicUrl(new URL(location, current).href);
-  }
-  throw new Error('Too many redirects.');
+async function requestValidated(startUrl, options, redirectCount = 0) {
+  const current = await assertPublicUrl(startUrl);
+  const transport = current.protocol === 'https:' ? https : http;
+
+  return await new Promise((resolve, reject) => {
+    const upstreamReq = transport.request(current, {
+      method: options.method,
+      headers: options.headers,
+      signal: options.signal
+    }, async (response) => {
+      const status = Number(response.statusCode || 0);
+      const location = response.headers.location;
+      if ([301, 302, 303, 307, 308].includes(status) && location) {
+        response.resume();
+        if (redirectCount >= MAX_REDIRECTS) return reject(new Error('Too many redirects.'));
+        try {
+          const next = new URL(location, current).href;
+          return resolve(await requestValidated(next, options, redirectCount + 1));
+        } catch (error) {
+          return reject(error);
+        }
+      }
+      resolve({ response, finalUrl: current });
+    });
+
+    upstreamReq.setTimeout(CONNECT_TIMEOUT_MS, () => {
+      const error = new Error('Stream connection timed out');
+      error.code = 'ETIMEDOUT';
+      upstreamReq.destroy(error);
+    });
+    upstreamReq.once('error', reject);
+    upstreamReq.end();
+  });
 }
 
 function proxyUrl(target, userAgent, referrer) {
@@ -78,11 +104,36 @@ function rewriteManifest(text, baseUrl, userAgent, referrer) {
   }).join('\n');
 }
 
+async function readLimited(stream, limit) {
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of stream) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buf.length;
+    if (total > limit) {
+      stream.destroy();
+      throw new Error('Manifest too large');
+    }
+    chunks.push(buf);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 module.exports = async function streamHandler(req, res) {
-  if (!['GET', 'HEAD'].includes(req.method)) {
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
     res.statusCode = 405;
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     return res.end('Method not allowed');
+  }
+
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges, Content-Type');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  if (req.method === 'OPTIONS') {
+    res.statusCode = 204;
+    return res.end();
   }
 
   const input = typeof req.query?.url === 'string' ? req.query.url.trim() : '';
@@ -103,72 +154,81 @@ module.exports = async function streamHandler(req, res) {
   }
 
   const headers = {
-    'User-Agent': requestedUa || cleanHeaderValue(req.headers['user-agent'], 350) || 'Mozilla/5.0',
+    'User-Agent': requestedUa || 'VLC/3.0.21 LibVLC/3.0.21',
     'Accept': '*/*',
-    'Accept-Encoding': 'identity'
+    'Accept-Encoding': 'identity',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+    'Connection': 'keep-alive'
   };
   if (referrer) headers.Referer = referrer;
   if (req.headers.range) headers.Range = cleanHeaderValue(req.headers.range, 120);
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), CONNECT_TIMEOUT_MS);
   const onClose = () => controller.abort();
   req.once('aborted', onClose);
 
   try {
-    const { response: upstream, finalUrl } = await fetchValidated(input, {
+    const { response: upstream, finalUrl } = await requestValidated(input, {
       method: req.method,
       headers,
       signal: controller.signal
     });
-    clearTimeout(timer);
 
-    res.statusCode = upstream.status;
-    const contentType = upstream.headers.get('content-type') || '';
-    const contentLength = upstream.headers.get('content-length');
-    const contentRange = upstream.headers.get('content-range');
-    const acceptRanges = upstream.headers.get('accept-ranges');
+    const status = Number(upstream.statusCode || 502);
+    const contentType = String(upstream.headers['content-type'] || '');
+    const contentRange = upstream.headers['content-range'];
+    const acceptRanges = upstream.headers['accept-ranges'];
+    const contentLength = upstream.headers['content-length'];
 
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    if (contentType) res.setHeader('Content-Type', contentType);
+    console.log(`[stream] host=${finalUrl.hostname} status=${status} type=${contentType || 'unknown'}`);
+
+    res.statusCode = status;
     if (contentRange) res.setHeader('Content-Range', contentRange);
     if (acceptRanges) res.setHeader('Accept-Ranges', acceptRanges);
 
     const looksLikeManifest = /mpegurl|m3u8/i.test(contentType) || /\.m3u8(?:$|\?)/i.test(finalUrl.href);
-    if (req.method === 'HEAD') return res.end();
+    const looksLikeTs = /mp2t|mpeg-?ts/i.test(contentType) || /\.ts(?:$|\?)/i.test(finalUrl.href) || /\/live\/[^/]+\/[^/]+\/\d+\/?$/i.test(finalUrl.pathname);
 
     if (looksLikeManifest) {
-      const text = await upstream.text();
-      if (Buffer.byteLength(text, 'utf8') > MAX_MANIFEST_BYTES) {
-        res.statusCode = 413;
-        return res.end('Manifest too large');
-      }
+      const text = await readLimited(upstream, MAX_MANIFEST_BYTES);
       const rewritten = rewriteManifest(text, finalUrl.href, requestedUa, referrer);
-      res.statusCode = upstream.ok ? 200 : upstream.status;
       res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
       res.setHeader('Cache-Control', 'no-store');
-      res.removeHeader('Content-Length');
       return res.end(rewritten);
     }
 
-    if (contentLength) res.setHeader('Content-Length', contentLength);
-    res.setHeader('Cache-Control', upstream.headers.get('cache-control') || 'private, max-age=20');
+    res.setHeader('Content-Type', contentType || (looksLikeTs ? 'video/mp2t' : 'application/octet-stream'));
+    res.setHeader('Cache-Control', 'no-store');
 
-    if (!upstream.body) return res.end();
-    const nodeStream = Readable.fromWeb(upstream.body);
-    nodeStream.on('error', () => { if (!res.destroyed) res.destroy(); });
-    nodeStream.pipe(res);
+    if (req.method === 'HEAD') {
+      if (contentLength) res.setHeader('Content-Length', contentLength);
+      upstream.resume();
+      return res.end();
+    }
+
+    // For ranged/static responses preserve the known length. For indefinite live streams,
+    // omit Content-Length so Node/Render can stream chunks immediately.
+    if ((status === 206 || req.headers.range) && contentLength) res.setHeader('Content-Length', contentLength);
+
+    upstream.once('error', () => {
+      if (!res.destroyed) res.destroy();
+    });
+    res.once('close', () => {
+      if (!upstream.destroyed) upstream.destroy();
+    });
+    return upstream.pipe(res);
   } catch (error) {
-    clearTimeout(timer);
     if (res.headersSent) {
       if (!res.destroyed) res.destroy();
       return;
     }
-    res.statusCode = error?.name === 'AbortError' ? 504 : 502;
+    const timedOut = error?.code === 'ETIMEDOUT' || error?.name === 'AbortError';
+    console.error(`[stream-error] ${timedOut ? 'timeout' : (error?.code || error?.name || 'error')}: ${error?.message || 'unknown'}`);
+    res.statusCode = timedOut ? 504 : 502;
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
-    return res.end(error?.name === 'AbortError' ? 'Stream request timed out' : (error?.message || 'Stream proxy failed'));
+    return res.end(timedOut ? 'Stream request timed out' : (error?.message || 'Stream proxy failed'));
   } finally {
     req.off('aborted', onClose);
   }
