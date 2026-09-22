@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#071018" />
+  <title>NEXA IPTV Editor</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="ambient a1"></div><div class="ambient a2"></div>
+  <section id="authView" class="auth-view">
+    <div class="auth-shell glass">
+      <div class="brand-lockup"><span class="brand-mark">N</span><div><b>NEXA</b><small>IPTV EDITOR</small></div></div>
+      <div class="auth-copy"><p class="eyebrow">CLOUD PLAYLIST CONTROL</p><h1>Edit once.<br><span>Play everywhere.</span></h1><p>Import M3U, organize channels, clean categories, and publish a private playlist URL for your players.</p></div>
+      <form id="authForm" class="auth-form">
+        <div class="segmented"><button type="button" data-mode="login" class="active">Login</button><button type="button" data-mode="register">Register</button></div>
+        <label>Email<input id="email" type="email" autocomplete="email" required placeholder="you@example.com"></label>
+        <label>Password<input id="password" type="password" autocomplete="current-password" minlength="8" required placeholder="Minimum 8 characters"></label>
+        <div id="authError" class="error-text"></div>
+        <button class="primary full" id="authSubmit" type="submit">Enter dashboard</button>
+      </form>
+    </div>
+  </section>
+
+  <section id="appView" class="app-view hidden">
+    <aside class="sidebar glass">
+      <div class="side-top">
+        <div class="brand-lockup compact"><span class="brand-mark">N</span><div><b>NEXA</b><small>EDITOR</small></div></div>
+        <button id="newPlaylistBtn" class="icon-btn" title="New playlist">＋</button>
+      </div>
+      <nav>
+        <button class="nav-btn active" data-nav="dashboard"><span>◫</span> Dashboard</button>
+        <div class="nav-label">PLAYLISTS</div>
+        <div id="playlistNav" class="playlist-nav"></div>
+      </nav>
+      <div class="sidebar-bottom">
+        <div id="userEmail" class="user-email"></div>
+        <button id="logoutBtn" class="nav-btn danger"><span>↪</span> Log out</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button id="mobileMenu" class="icon-btn mobile-only">☰</button>
+        <div><p class="eyebrow" id="pageEyebrow">OVERVIEW</p><h2 id="pageTitle">Dashboard</h2></div>
+        <div class="top-actions"><button id="importBtn" class="ghost">Import playlist</button><button id="addChannelTop" class="primary hidden">+ Add channel</button></div>
+      </header>
+
+      <section id="dashboardView" class="content">
+        <div class="hero-card glass">
+          <div><p class="eyebrow">NEXA CLOUD</p><h3>Your IPTV workspace</h3><p>Build clean playlists for Android, LG webOS, VLC and any player that accepts M3U.</p></div>
+          <button id="heroImport" class="primary">Import your first M3U</button>
+        </div>
+        <div class="stats-grid">
+          <div class="stat glass"><span>Total playlists</span><strong id="statPlaylists">0</strong></div>
+          <div class="stat glass"><span>Total channels</span><strong id="statChannels">0</strong></div>
+          <div class="stat glass"><span>Enabled</span><strong id="statEnabled">0</strong></div>
+          <div class="stat glass"><span>Groups</span><strong id="statGroups">0</strong></div>
+        </div>
+        <div class="panel glass"><div class="panel-head"><div><p class="eyebrow">RECENT</p><h3>Your playlists</h3></div></div><div id="dashboardPlaylists" class="dashboard-playlists"></div></div>
+      </section>
+
+      <section id="editorView" class="content hidden">
+        <div class="playlist-header glass">
+          <div><p class="eyebrow">PLAYLIST</p><h3 id="playlistName">—</h3><p id="playlistMeta" class="muted"></p></div>
+          <div class="header-actions"><button id="refreshSource" class="ghost">↻ Refresh source</button><button id="copyPublic" class="ghost">Copy M3U URL</button><button id="downloadM3u" class="primary">Export M3U</button><button id="playlistSettings" class="icon-btn">⚙</button></div>
+        </div>
+        <div class="toolbar glass">
+          <input id="search" class="search" placeholder="Search channels, groups, tvg-id…">
+          <select id="groupFilter"><option value="">All groups</option></select>
+          <select id="statusFilter"><option value="">All status</option><option value="enabled">Enabled</option><option value="disabled">Disabled</option></select>
+          <button id="selectAllBtn" class="ghost">Select visible</button>
+          <button id="bulkEnable" class="ghost">Enable</button><button id="bulkDisable" class="ghost">Disable</button><button id="bulkDelete" class="ghost danger-text">Delete</button>
+        </div>
+        <div class="editor-grid">
+          <div class="channel-panel glass">
+            <div class="panel-head"><div><p class="eyebrow">CHANNELS</p><h3><span id="visibleCount">0</span> shown</h3></div><button id="addChannelBtn" class="primary">+ Add channel</button></div>
+            <div class="table-wrap"><table><thead><tr><th></th><th></th><th>Channel</th><th>Group</th><th>TVG ID</th><th>Status</th><th></th></tr></thead><tbody id="channelRows"></tbody></table></div>
+            <div id="emptyChannels" class="empty hidden">No channels match this filter.</div>
+          </div>
+          <aside class="groups-panel glass"><div class="panel-head"><div><p class="eyebrow">GROUPS</p><h3>Categories</h3></div></div><div id="groupList" class="group-list"></div></aside>
+        </div>
+      </section>
+    </main>
+  </section>
+
+  <div id="overlay" class="overlay hidden"></div>
+  <dialog id="importDialog" class="modal glass">
+    <form method="dialog" id="importForm"><div class="modal-head"><div><p class="eyebrow">IMPORT</p><h3>New playlist</h3></div><button value="cancel" class="icon-btn">×</button></div>
+      <label>Playlist name<input id="importName" required placeholder="My IPTV"></label>
+      <label>M3U source URL <small>optional if you paste M3U below</small><input id="importUrl" placeholder="https://provider.example/list.m3u"></label>
+      <label>EPG / XMLTV URL <small>optional</small><input id="importEpg" placeholder="https://provider.example/epg.xml"></label>
+      <label>Paste M3U <small>optional if source URL is set</small><textarea id="importText" rows="8" placeholder="#EXTM3U…"></textarea></label>
+      <div id="importError" class="error-text"></div><div class="modal-actions"><button value="cancel" class="ghost">Cancel</button><button id="importSubmit" type="submit" class="primary">Import playlist</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="channelDialog" class="modal glass wide">
+    <form method="dialog" id="channelForm"><div class="modal-head"><div><p class="eyebrow">CHANNEL</p><h3 id="channelModalTitle">Edit channel</h3></div><button value="cancel" class="icon-btn">×</button></div>
+      <div class="form-grid"><label>Name<input id="chName" required></label><label>Group<input id="chGroup"></label><label class="span2">Stream URL<input id="chUrl" required></label><label>TVG ID<input id="chTvgId"></label><label>TVG Name<input id="chTvgName"></label><label class="span2">Logo URL<input id="chLogo"></label><label>User-Agent<input id="chUa"></label><label>Referrer<input id="chRef"></label><label class="check"><input id="chEnabled" type="checkbox"> Enabled</label></div>
+      <div class="modal-actions"><button value="cancel" class="ghost">Cancel</button><button type="submit" class="primary">Save channel</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog" class="modal glass">
+    <form method="dialog" id="settingsForm"><div class="modal-head"><div><p class="eyebrow">SETTINGS</p><h3>Playlist settings</h3></div><button value="cancel" class="icon-btn">×</button></div>
+      <label>Name<input id="settingsName"></label><label>Source URL<input id="settingsSource"></label><label>EPG URL<input id="settingsEpg"></label>
+      <div class="modal-actions split"><button id="deletePlaylist" type="button" class="ghost danger-text">Delete playlist</button><span></span><button value="cancel" class="ghost">Cancel</button><button type="submit" class="primary">Save</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="renameGroupDialog" class="modal glass small">
+    <form method="dialog" id="renameGroupForm"><div class="modal-head"><div><p class="eyebrow">CATEGORY</p><h3>Rename group</h3></div><button value="cancel" class="icon-btn">×</button></div><label>New name<input id="renameGroupTo" required></label><div class="modal-actions"><button value="cancel" class="ghost">Cancel</button><button type="submit" class="primary">Rename</button></div></form>
+  </dialog>
+
+  <div id="toast" class="toast"></div>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
