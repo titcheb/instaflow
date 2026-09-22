@@ -1,0 +1,42 @@
+const importPreviews=new Map();
+function pruneImportPreviews(){const t=Date.now();for(const [k,v] of importPreviews)if(!v||v.expires<t)importPreviews.delete(k);while(importPreviews.size>40)importPreviews.delete(importPreviews.keys().next().value)}
+function categorySummary(channels,preferred=[]){const counts=new Map(),first=[];for(const c of channels){const g=clean(c.group_title||'Other',500)||'Other';if(!counts.has(g))first.push(g);counts.set(g,(counts.get(g)||0)+1)}const order=[];for(const g of preferred||[])if(counts.has(g)&&!order.includes(g))order.push(g);for(const g of first)if(!order.includes(g))order.push(g);return {order,categories:order.map(name=>({name,count:counts.get(name)||0}))}}
+function createPreviewToken(){return crypto.randomBytes(24).toString('hex')}
+
+app.post('/api/import/preview',async(req,res)=>{
+  const a=requireAuth(req,res);if(!a)return;
+  pruneImportPreviews();
+  try{
+    const mode=req.body.mode==='xtream'?'xtream':'m3u',name=clean(req.body.name,200)||(mode==='xtream'?'Xtream playlist':'My playlist');
+    let channels=[],categoryOrder=[],meta={mode,name};
+    if(mode==='xtream'){
+      const server=clean(req.body.server,5000),username=clean(req.body.username,500),password=String(req.body.password||''),output=req.body.output==='m3u8'?'m3u8':'ts';
+      if(!server||!username||!password)return res.status(400).json({error:'Server, username and password are required.'});
+      const d=await fetchXtreamData(server,username,password,output);channels=d.channels;categoryOrder=d.categoryOrder;
+      meta={mode,name,epgUrl:clean(req.body.epgUrl,5000)||`${d.base}/xmltv.php?username=${encodeURIComponent(d.user)}&password=${encodeURIComponent(d.pass)}`,xtream:{server:d.base,username:d.user,password:d.pass,output:d.output}};
+    }else{
+      const sourceUrl=clean(req.body.sourceUrl,5000),epgUrl=clean(req.body.epgUrl,5000);let text=String(req.body.m3uText||'');
+      if(text.length>MAX)return res.status(413).json({error:'Playlist is larger than 25 MB.'});
+      if(!text&&sourceUrl)text=await fetchPlaylist(sourceUrl);
+      if(!text)return res.status(400).json({error:'Paste/upload an M3U or provide a source URL.'});
+      channels=parseM3u(text);if(!channels.length)return res.status(400).json({error:'No HTTP/HTTPS channels were found in this playlist.'});
+      categoryOrder=categorySummary(channels).order;meta={mode,name,sourceUrl,epgUrl};
+    }
+    const summary=categorySummary(channels,categoryOrder),previewToken=createPreviewToken();
+    importPreviews.set(previewToken,{uid:String(a.user.id),expires:Date.now()+15*60*1000,channels,categoryOrder:summary.order,meta});
+    res.json({previewToken,totalChannels:channels.length,totalCategories:summary.categories.length,categories:summary.categories,expiresIn:900,mode});
+  }catch(e){if(e instanceof UpstreamError)return res.status(502).json({error:`The IPTV provider returned HTTP ${e.status}. It may be blocking cloud/server access.`,upstreamStatus:e.status});res.status(502).json({error:e.message||'Could not preview this playlist.'})}
+});
+
+app.post('/api/import/commit',(req,res)=>{
+  const a=requireAuth(req,res);if(!a)return;pruneImportPreviews();
+  const token=clean(req.body.previewToken,200),preview=importPreviews.get(token);if(!preview||preview.expires<Date.now())return res.status(410).json({error:'Import preview expired. Preview the playlist again.'});
+  if(preview.uid!==String(a.user.id))return res.status(403).json({error:'This preview belongs to another account.'});
+  const requested=Array.isArray(req.body.categories)?req.body.categories.map(x=>clean(x,500)).filter(Boolean):[],selected=new Set(requested);if(!selected.size)return res.status(400).json({error:'Select at least one category to import.'});
+  const allowed=new Set(preview.categoryOrder),chosen=preview.categoryOrder.filter(g=>selected.has(g)&&allowed.has(g));if(!chosen.length)return res.status(400).json({error:'None of the selected categories are available in this preview.'});
+  const channels=preview.channels.filter(c=>selected.has(c.group_title||'Other'));if(!channels.length)return res.status(400).json({error:'The selected categories contain no channels.'});
+  const s=a.store,m=preview.meta,p={id:next(s,'playlist'),user_id:a.user.id,name:m.name,source_url:m.mode==='m3u'?(m.sourceUrl||''):'',epg_url:m.epgUrl||'',public_token:crypto.randomBytes(18).toString('hex'),category_order:chosen,created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+  if(m.mode==='xtream'){p.source_type='xtream';p.xtream=m.xtream}
+  s.playlists.push(p);let order=0;for(const c of channels)s.channels.push({id:next(s,'channel'),playlist_id:p.id,...c,sort_order:order++,created_at:new Date().toISOString(),updated_at:new Date().toISOString()});
+  writeStore(s);importPreviews.delete(token);restartChild();res.json({...p,channel_count:channels.length,group_count:chosen.length});
+});
