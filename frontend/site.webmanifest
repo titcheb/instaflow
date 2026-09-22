@@ -1,0 +1,12 @@
+{
+  "name": "InstaFlow — Instagram Reel Downloader",
+  "short_name": "InstaFlow",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050711",
+  "theme_color": "#060913",
+  "description": "Fast browser-based downloader for public Instagram Reels and video posts.",
+  "icons": [
+    {"src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}
+  ]
+}
