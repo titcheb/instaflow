@@ -120,6 +120,8 @@ async function readLimited(stream, limit) {
 }
 
 module.exports = async function streamHandler(req, res) {
+  console.log(`[stream-in] method=${req.method}`);
+
   if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
     res.statusCode = 405;
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -130,6 +132,7 @@ module.exports = async function streamHandler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type');
   res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges, Content-Type');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;
@@ -143,6 +146,12 @@ module.exports = async function streamHandler(req, res) {
     return res.end('Missing stream URL');
   }
 
+  let rawLikeInput = false;
+  try {
+    const parsedInput = new URL(input);
+    rawLikeInput = /\.ts(?:$|\?)/i.test(parsedInput.href) || /\/live\/[^/]+\/[^/]+\/\d+\/?$/i.test(parsedInput.pathname);
+  } catch {}
+
   const requestedUa = cleanHeaderValue(req.query.ua, 350);
   const requestedRef = cleanHeaderValue(req.query.ref, 1200);
   let referrer = '';
@@ -155,17 +164,21 @@ module.exports = async function streamHandler(req, res) {
 
   const headers = {
     'User-Agent': requestedUa || 'VLC/3.0.21 LibVLC/3.0.21',
-    'Accept': '*/*',
+    'Accept': rawLikeInput ? 'video/mp2t, video/mpeg, application/octet-stream, */*' : '*/*',
     'Accept-Encoding': 'identity',
     'Cache-Control': 'no-cache',
     'Pragma': 'no-cache',
     'Connection': 'keep-alive'
   };
   if (referrer) headers.Referer = referrer;
-  if (req.headers.range) headers.Range = cleanHeaderValue(req.headers.range, 120);
+  // Byte ranges can break many Xtream/RAW live endpoints. Only preserve Range for non-live resources.
+  if (req.headers.range && !rawLikeInput) headers.Range = cleanHeaderValue(req.headers.range, 120);
 
   const controller = new AbortController();
-  const onClose = () => controller.abort();
+  const onClose = () => {
+    console.warn('[stream-abort] client aborted request');
+    controller.abort();
+  };
   req.once('aborted', onClose);
 
   try {
@@ -181,11 +194,11 @@ module.exports = async function streamHandler(req, res) {
     const acceptRanges = upstream.headers['accept-ranges'];
     const contentLength = upstream.headers['content-length'];
 
-    console.log(`[stream] host=${finalUrl.hostname} status=${status} type=${contentType || 'unknown'}`);
+    console.log(`[stream] host=${finalUrl.hostname} status=${status} type=${contentType || 'unknown'} raw=${rawLikeInput ? '1' : '0'}`);
 
     res.statusCode = status;
     if (contentRange) res.setHeader('Content-Range', contentRange);
-    if (acceptRanges) res.setHeader('Accept-Ranges', acceptRanges);
+    if (acceptRanges && !rawLikeInput) res.setHeader('Accept-Ranges', acceptRanges);
 
     const looksLikeManifest = /mpegurl|m3u8/i.test(contentType) || /\.m3u8(?:$|\?)/i.test(finalUrl.href);
     const looksLikeTs = /mp2t|mpeg-?ts/i.test(contentType) || /\.ts(?:$|\?)/i.test(finalUrl.href) || /\/live\/[^/]+\/[^/]+\/\d+\/?$/i.test(finalUrl.pathname);
@@ -207,11 +220,12 @@ module.exports = async function streamHandler(req, res) {
       return res.end();
     }
 
-    // For ranged/static responses preserve the known length. For indefinite live streams,
-    // omit Content-Length so Node/Render can stream chunks immediately.
-    if ((status === 206 || req.headers.range) && contentLength) res.setHeader('Content-Length', contentLength);
+    if (!rawLikeInput && (status === 206 || req.headers.range) && contentLength) {
+      res.setHeader('Content-Length', contentLength);
+    }
 
-    upstream.once('error', () => {
+    upstream.once('error', (error) => {
+      console.error(`[stream-upstream-error] ${error?.code || error?.name || 'error'}: ${error?.message || 'unknown'}`);
       if (!res.destroyed) res.destroy();
     });
     res.once('close', () => {
