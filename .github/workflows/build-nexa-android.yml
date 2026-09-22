@@ -1,0 +1,64 @@
+name: Build NEXA IPTV Android APK
+
+on:
+  push:
+    branches: [nexa-iptv]
+    paths:
+      - 'android-src.tar.gz.b64'
+      - '.github/workflows/build-nexa-android.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore Android source
+        run: |
+          base64 -d android-src.tar.gz.b64 > /tmp/nexa-android.tar.gz
+          tar -xzf /tmp/nexa-android.tar.gz
+          test -f android/app/src/main/java/se/nexa/iptv/MainActivity.java
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build debug APK
+        run: gradle -p android assembleDebug --stacktrace
+
+      - name: Prepare artifacts
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk NEXA-IPTV.apk
+          zip -qr NEXA-IPTV-Android-Source.zip android
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEXA-IPTV-APK
+          path: NEXA-IPTV.apk
+          if-no-files-found: error
+
+      - name: Upload source
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEXA-IPTV-Android-Source
+          path: NEXA-IPTV-Android-Source.zip
+          if-no-files-found: error
