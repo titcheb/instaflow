@@ -2,56 +2,259 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="theme-color" content="#070b14" />
-  <title>InstaFlow — Instagram Reel Downloader</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#060913" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+  <meta name="description" content="Download public Instagram Reels and video posts quickly with InstaFlow. Paste an Instagram link, preview the video and download the best available MP4 in seconds." />
+  <meta name="keywords" content="Instagram Reel downloader, Instagram video downloader, download Instagram reels, save Instagram video, Reel downloader, InstaFlow" />
+  <meta name="author" content="InstaFlow" />
+  <meta name="application-name" content="InstaFlow" />
+  <meta name="apple-mobile-web-app-title" content="InstaFlow" />
+  <meta name="format-detection" content="telephone=no" />
+
+  <link rel="canonical" href="https://instaflow-web.onrender.com/" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="manifest" href="/site.webmanifest" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="InstaFlow" />
+  <meta property="og:title" content="InstaFlow — Fast Instagram Reel & Video Downloader" />
+  <meta property="og:description" content="Paste a public Instagram Reel or video post link and prepare an MP4 download in seconds." />
+  <meta property="og:url" content="https://instaflow-web.onrender.com/" />
+  <meta property="og:image" content="https://instaflow-web.onrender.com/og-image.svg" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="InstaFlow — Instagram Reel Downloader" />
+  <meta name="twitter:description" content="Fast, clean and simple Instagram Reel and video downloads for public media." />
+  <meta name="twitter:image" content="https://instaflow-web.onrender.com/og-image.svg" />
+
+  <title>Instagram Reel Downloader — Download Reels & Videos | InstaFlow</title>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "InstaFlow",
+    "url": "https://instaflow-web.onrender.com/",
+    "applicationCategory": "MultimediaApplication",
+    "operatingSystem": "Any",
+    "description": "A browser-based tool for preparing downloads of public Instagram Reels and video posts.",
+    "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
+    "featureList": [
+      "Public Instagram Reel support",
+      "Public video post support",
+      "MP4 download preparation",
+      "No software installation required"
+    ]
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "How do I download an Instagram Reel with InstaFlow?",
+        "acceptedAnswer": {"@type": "Answer", "text": "Copy the public Instagram Reel URL, paste it into InstaFlow, select Get video, then use the Download MP4 button when the video is ready."}
+      },
+      {
+        "@type": "Question",
+        "name": "Does InstaFlow support private Instagram accounts?",
+        "acceptedAnswer": {"@type": "Answer", "text": "No. InstaFlow is designed for public media that you own or are authorized to save and does not bypass private-account access restrictions."}
+      },
+      {
+        "@type": "Question",
+        "name": "Do I need to install an app?",
+        "acceptedAnswer": {"@type": "Answer", "text": "No. InstaFlow runs directly in a modern web browser."}
+      }
+    ]
+  }
+  </script>
+
   <style>
-    :root{--bg:#070b14;--panel:#0d1423;--panel2:#111a2d;--text:#f6f8fb;--muted:#91a0b8;--accent:#7c5cff;--accent2:#23d5d5;--danger:#ff6376;--line:rgba(255,255,255,.08)}
-    *{box-sizing:border-box} body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:radial-gradient(circle at 20% 10%,rgba(124,92,255,.14),transparent 35%),radial-gradient(circle at 80% 0,rgba(35,213,213,.10),transparent 30%),var(--bg);color:var(--text);min-height:100vh}
-    .wrap{max-width:980px;margin:0 auto;padding:32px 20px 64px}.nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:72px}.brand{display:flex;align-items:center;gap:12px;font-weight:800;letter-spacing:-.03em;font-size:20px}.logo{width:34px;height:34px;border-radius:11px;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 0 30px rgba(124,92,255,.35)}.badge{font-size:12px;color:#c7d0df;border:1px solid var(--line);padding:8px 11px;border-radius:999px;background:rgba(255,255,255,.03)}
-    .hero{text-align:center;max-width:780px;margin:0 auto}.hero h1{font-size:clamp(40px,7vw,72px);line-height:.98;letter-spacing:-.055em;margin:0 0 20px}.hero p{color:var(--muted);font-size:18px;line-height:1.6;margin:0 auto 34px;max-width:650px}
-    .card{background:linear-gradient(180deg,rgba(17,26,45,.92),rgba(11,17,30,.92));border:1px solid var(--line);border-radius:24px;padding:18px;box-shadow:0 24px 70px rgba(0,0,0,.35);backdrop-filter:blur(14px)}
-    .form{display:grid;grid-template-columns:1fr auto;gap:12px}.input{width:100%;border:1px solid var(--line);outline:none;background:#080e19;color:var(--text);font-size:16px;padding:17px 18px;border-radius:16px;transition:.2s}.input:focus{border-color:rgba(124,92,255,.65);box-shadow:0 0 0 4px rgba(124,92,255,.10)}.btn{border:0;border-radius:16px;padding:0 24px;min-height:56px;font-weight:800;font-size:15px;color:white;background:linear-gradient(135deg,var(--accent),#5f8cff);cursor:pointer;box-shadow:0 12px 30px rgba(92,90,255,.28)}.btn:disabled{opacity:.55;cursor:not-allowed}.hint{font-size:13px;color:var(--muted);margin:12px 4px 0;text-align:left}
-    .status{margin-top:18px;display:none;padding:14px 16px;border-radius:14px;font-size:14px;text-align:left;border:1px solid var(--line);background:rgba(255,255,255,.03)}.status.show{display:block}.status.error{color:#ffd7dc;border-color:rgba(255,99,118,.28);background:rgba(255,99,118,.08)}
-    .result{margin-top:22px;display:none;text-align:left}.result.show{display:block}.media{display:grid;grid-template-columns:220px 1fr;gap:22px;align-items:stretch}.thumb{background:#060a12;border:1px solid var(--line);border-radius:18px;overflow:hidden;min-height:240px}.thumb img{width:100%;height:100%;object-fit:cover;display:block}.info{display:flex;flex-direction:column;justify-content:center}.eyebrow{color:var(--accent2);font-size:12px;text-transform:uppercase;letter-spacing:.12em;font-weight:800}.title{font-size:26px;line-height:1.2;letter-spacing:-.025em;margin:8px 0 12px}.meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:22px}.pill{font-size:12px;color:#c6d0df;padding:7px 10px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.03)}.download{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;width:max-content;min-width:180px;min-height:50px;padding:0 18px;border-radius:14px;font-weight:800;color:#071018;background:linear-gradient(135deg,#83fff2,#77e1ff)}
-    .foot{text-align:center;color:#607089;font-size:12px;margin-top:26px}.spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.25);border-top-color:white;border-radius:50%;display:inline-block;vertical-align:-3px;margin-right:8px;animation:spin .75s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
-    @media(max-width:720px){.nav{margin-bottom:48px}.form{grid-template-columns:1fr}.btn{width:100%}.media{grid-template-columns:1fr}.thumb{max-height:440px}.hero h1{font-size:46px}.card{padding:14px}}
+    :root{
+      --bg:#050711;--bg2:#090d1a;--panel:rgba(13,18,34,.72);--panel2:rgba(17,25,46,.78);
+      --text:#f7f9ff;--muted:#98a6bf;--line:rgba(255,255,255,.09);--line2:rgba(123,97,255,.28);
+      --purple:#875cff;--purple2:#b56cff;--cyan:#35e7f0;--blue:#4f8cff;--green:#62f5bd;--danger:#ff657d;
+      --shadow:0 30px 90px rgba(0,0,0,.45);--radius:24px;
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth;background:var(--bg)}
+    body{margin:0;color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);min-height:100vh;overflow-x:hidden}
+    a{color:inherit} button,input{font:inherit}
+    .ambient{position:fixed;inset:0;pointer-events:none;z-index:-4;background:
+      radial-gradient(circle at 15% 12%,rgba(135,92,255,.18),transparent 28%),
+      radial-gradient(circle at 86% 16%,rgba(53,231,240,.13),transparent 28%),
+      radial-gradient(circle at 52% 72%,rgba(79,140,255,.09),transparent 34%),
+      linear-gradient(180deg,#050711 0%,#070b16 52%,#050711 100%)}
+    .grid{position:fixed;inset:0;pointer-events:none;z-index:-3;opacity:.18;background-image:linear-gradient(rgba(255,255,255,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.045) 1px,transparent 1px);background-size:62px 62px;mask-image:linear-gradient(to bottom,black,transparent 85%)}
+    .noise{position:fixed;inset:0;pointer-events:none;z-index:-2;opacity:.04;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E")}
+    .orb{position:fixed;border-radius:50%;filter:blur(28px);pointer-events:none;z-index:-1;opacity:.34;animation:float 12s ease-in-out infinite}
+    .orb.one{width:240px;height:240px;left:-80px;top:22%;background:rgba(135,92,255,.24)}
+    .orb.two{width:290px;height:290px;right:-110px;top:44%;background:rgba(53,231,240,.18);animation-delay:-5s}
+    @keyframes float{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(0,-28px,0) scale(1.08)}}
+
+    .shell{width:min(1160px,calc(100% - 36px));margin:0 auto}
+    .nav{position:sticky;top:14px;z-index:30;display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding:12px 14px;border:1px solid var(--line);border-radius:20px;background:rgba(7,10,20,.72);backdrop-filter:blur(22px);box-shadow:0 12px 40px rgba(0,0,0,.18)}
+    .brand{display:flex;align-items:center;gap:10px;text-decoration:none;font-weight:900;letter-spacing:-.04em;font-size:20px}
+    .brandmark{width:36px;height:36px;border-radius:12px;position:relative;background:linear-gradient(135deg,var(--purple),var(--cyan));box-shadow:0 0 30px rgba(135,92,255,.42);overflow:hidden}
+    .brandmark:before{content:"";position:absolute;inset:8px;border:2px solid rgba(255,255,255,.92);border-radius:8px}
+    .brandmark:after{content:"";position:absolute;width:5px;height:5px;border-radius:50%;background:white;right:8px;top:8px;box-shadow:-9px 9px 0 2px rgba(255,255,255,.95)}
+    .navlinks{display:flex;align-items:center;gap:8px}
+    .navlinks a{font-size:13px;color:#c4cee0;text-decoration:none;padding:9px 11px;border-radius:10px;transition:.2s}
+    .navlinks a:hover{background:rgba(255,255,255,.055);color:white}
+    .navpill{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:800;color:#dfe8f8;padding:9px 12px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.035)}
+    .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 16px var(--green)}
+
+    .hero{padding:92px 0 44px;text-align:center;position:relative}
+    .kicker{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid rgba(135,92,255,.3);background:rgba(135,92,255,.08);color:#d8caff;font-size:12px;font-weight:850;letter-spacing:.04em;text-transform:uppercase;box-shadow:inset 0 0 25px rgba(135,92,255,.05)}
+    .spark{width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 14px var(--cyan);animation:pulse 1.8s ease-in-out infinite}
+    @keyframes pulse{50%{opacity:.35;transform:scale(.72)}}
+    h1{font-size:clamp(50px,8vw,94px);line-height:.91;letter-spacing:-.07em;margin:22px auto 20px;max-width:1000px}
+    .grad{background:linear-gradient(90deg,#fff 8%,#b6c7ff 34%,#af8bff 62%,#68eff4 94%);-webkit-background-clip:text;background-clip:text;color:transparent;background-size:180% auto;animation:shine 7s linear infinite}
+    @keyframes shine{to{background-position:180% center}}
+    .hero-copy{max-width:760px;margin:0 auto;color:var(--muted);font-size:clamp(16px,2vw,19px);line-height:1.75}
+    .hero-stats{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin:26px 0 0}
+    .stat{font-size:12px;color:#bac5d9;padding:8px 11px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.025)}
+
+    .downloader-wrap{position:relative;max-width:940px;margin:38px auto 0}
+    .beam{position:absolute;inset:-1px;border-radius:28px;background:conic-gradient(from 0deg,transparent 0 20%,rgba(135,92,255,.75),rgba(53,231,240,.75),transparent 55% 100%);filter:blur(12px);opacity:.32;animation:spinbeam 8s linear infinite;z-index:-1}
+    @keyframes spinbeam{to{transform:rotate(360deg)}}
+    .downloader{border:1px solid rgba(255,255,255,.11);border-radius:28px;background:linear-gradient(180deg,rgba(16,22,40,.92),rgba(9,14,27,.91));padding:18px;box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.045);backdrop-filter:blur(24px)}
+    .terminal-bar{display:flex;align-items:center;justify-content:space-between;padding:0 4px 14px;color:#7e8ca5;font-size:11px;text-transform:uppercase;letter-spacing:.12em;font-weight:800}
+    .lights{display:flex;gap:6px}.lights i{width:7px;height:7px;border-radius:50%;display:block;background:#344056}.lights i:nth-child(1){background:#ff657d}.lights i:nth-child(2){background:#ffd36b}.lights i:nth-child(3){background:#62f5bd}
+    .form{display:grid;grid-template-columns:1fr auto;gap:12px}
+    .input-shell{position:relative}
+    .input-icon{position:absolute;left:17px;top:50%;transform:translateY(-50%);width:19px;height:19px;opacity:.6}
+    .input{width:100%;min-height:62px;border:1px solid var(--line);outline:none;background:rgba(4,8,17,.82);color:var(--text);font-size:15px;padding:0 18px 0 48px;border-radius:17px;transition:.25s;box-shadow:inset 0 1px 0 rgba(255,255,255,.025)}
+    .input:focus{border-color:rgba(135,92,255,.66);box-shadow:0 0 0 5px rgba(135,92,255,.10),0 0 45px rgba(135,92,255,.08)}
+    .input::placeholder{color:#64728a}
+    .btn{position:relative;overflow:hidden;border:0;border-radius:17px;padding:0 25px;min-height:62px;min-width:158px;font-weight:900;font-size:14px;color:white;background:linear-gradient(135deg,#744dff,#5d78ff 48%,#27cedd);cursor:pointer;box-shadow:0 16px 38px rgba(88,92,255,.28);transition:transform .2s,filter .2s}
+    .btn:before{content:"";position:absolute;inset:0;background:linear-gradient(120deg,transparent 25%,rgba(255,255,255,.23),transparent 65%);transform:translateX(-120%);transition:.55s}
+    .btn:hover{transform:translateY(-2px);filter:brightness(1.08)}.btn:hover:before{transform:translateX(120%)}.btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
+    .hintrow{display:flex;gap:10px;flex-wrap:wrap;margin:12px 3px 0;color:#76859e;font-size:12px}.hintrow span{display:inline-flex;align-items:center;gap:6px}.mini-dot{width:4px;height:4px;background:#526079;border-radius:50%}
+    .status{margin-top:15px;display:none;padding:13px 15px;border-radius:14px;font-size:13px;text-align:left;border:1px solid var(--line);background:rgba(255,255,255,.03);color:#cbd6e9}.status.show{display:block;animation:fadeup .28s ease}.status.error{color:#ffdce2;border-color:rgba(255,101,125,.32);background:rgba(255,101,125,.08)}
+    .result{margin-top:18px;display:none;text-align:left}.result.show{display:block;animation:fadeup .35s ease}
+    .media{display:grid;grid-template-columns:190px 1fr;gap:20px;align-items:stretch;padding:14px;border:1px solid var(--line);border-radius:20px;background:rgba(255,255,255,.025)}
+    .thumb{background:#050811;border:1px solid var(--line);border-radius:16px;overflow:hidden;min-height:210px}.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+    .info{display:flex;flex-direction:column;justify-content:center}.eyebrow{color:var(--cyan);font-size:11px;text-transform:uppercase;letter-spacing:.13em;font-weight:900}.result-title{font-size:24px;line-height:1.22;letter-spacing:-.03em;margin:7px 0 12px}
+    .meta{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:18px}.pill{font-size:11px;color:#c6d0df;padding:6px 9px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.03)}
+    .download{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;width:max-content;min-width:170px;min-height:48px;padding:0 16px;border-radius:13px;font-weight:900;color:#061016;background:linear-gradient(135deg,#8cfff5,#62dff4);box-shadow:0 12px 28px rgba(53,231,240,.18);transition:.2s}.download:hover{transform:translateY(-2px);filter:brightness(1.04)}
+    .spinner{width:15px;height:15px;border:2px solid rgba(255,255,255,.24);border-top-color:white;border-radius:50%;display:inline-block;vertical-align:-3px;margin-right:8px;animation:spin .72s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+
+    .section{padding:84px 0}.section-head{text-align:center;max-width:720px;margin:0 auto 34px}.section-tag{color:var(--cyan);font-size:11px;text-transform:uppercase;letter-spacing:.15em;font-weight:900}.section h2{font-size:clamp(34px,5vw,58px);line-height:1;letter-spacing:-.055em;margin:11px 0 14px}.section-head p{color:var(--muted);line-height:1.7;margin:0}
+    .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.feature{position:relative;overflow:hidden;min-height:220px;padding:24px;border:1px solid var(--line);border-radius:22px;background:linear-gradient(180deg,rgba(15,21,39,.72),rgba(9,13,26,.72));transition:.28s}.feature:hover{transform:translateY(-5px);border-color:rgba(135,92,255,.3);box-shadow:0 20px 60px rgba(0,0,0,.28)}
+    .feature:after{content:"";position:absolute;width:120px;height:120px;border-radius:50%;right:-55px;top:-60px;background:rgba(135,92,255,.17);filter:blur(18px)}
+    .icon{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;margin-bottom:30px;border:1px solid rgba(255,255,255,.09);background:linear-gradient(135deg,rgba(135,92,255,.16),rgba(53,231,240,.08));font-size:20px;box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+    .feature h3{font-size:18px;margin:0 0 8px;letter-spacing:-.025em}.feature p{color:#8796ae;line-height:1.65;font-size:14px;margin:0}
+
+    .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;counter-reset:step}.step{counter-increment:step;padding:25px;border:1px solid var(--line);border-radius:22px;background:rgba(255,255,255,.025);position:relative}.step:before{content:"0" counter(step);display:block;color:#7565a9;font-weight:900;font-size:12px;letter-spacing:.12em;margin-bottom:28px}.step h3{margin:0 0 8px;font-size:18px}.step p{margin:0;color:#8796ae;line-height:1.6;font-size:14px}
+
+    .faq{max-width:850px;margin:0 auto}.faq details{border:1px solid var(--line);border-radius:17px;background:rgba(255,255,255,.024);margin:10px 0;overflow:hidden}.faq summary{cursor:pointer;list-style:none;padding:20px 22px;font-weight:800;display:flex;justify-content:space-between;gap:20px}.faq summary::-webkit-details-marker{display:none}.faq summary:after{content:"+";color:var(--cyan);font-size:21px;font-weight:400;transition:.2s}.faq details[open] summary:after{transform:rotate(45deg)}.faq details p{padding:0 22px 21px;margin:0;color:#8d9bb2;line-height:1.7;font-size:14px}
+
+    .cta{position:relative;overflow:hidden;text-align:center;padding:48px 24px;border:1px solid rgba(135,92,255,.26);border-radius:28px;background:linear-gradient(135deg,rgba(135,92,255,.11),rgba(53,231,240,.055));box-shadow:var(--shadow)}
+    .cta:before{content:"";position:absolute;inset:auto 10% -80px;width:80%;height:160px;background:rgba(135,92,255,.16);filter:blur(60px);border-radius:50%}.cta h2{position:relative;margin:0 0 12px;font-size:clamp(30px,5vw,52px)}.cta p{position:relative;color:var(--muted);margin:0 auto 22px;max-width:640px;line-height:1.65}.cta a{position:relative;display:inline-flex;text-decoration:none;font-weight:900;padding:13px 17px;border-radius:13px;background:white;color:#090c16}
+
+    footer{padding:42px 0 54px;border-top:1px solid rgba(255,255,255,.06);margin-top:80px}.footer-grid{display:flex;align-items:flex-start;justify-content:space-between;gap:30px}.footer-copy{max-width:620px;color:#718099;font-size:12px;line-height:1.7}.footer-copy strong{color:#aeb9cc}.footer-links{display:flex;gap:14px;flex-wrap:wrap}.footer-links a{font-size:12px;color:#8594ab;text-decoration:none}.footer-links a:hover{color:white}
+    .reveal{opacity:0;transform:translateY(22px);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.2,1)}.reveal.visible{opacity:1;transform:none}
+    @keyframes fadeup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+    @media(max-width:900px){.cards,.steps{grid-template-columns:1fr 1fr}.cards .feature:last-child,.steps .step:last-child{grid-column:1/-1}.navlinks a{display:none}}
+    @media(max-width:680px){.shell{width:min(100% - 24px,1160px)}.nav{top:8px;margin-top:8px}.navpill{display:none}.hero{padding-top:68px}.form{grid-template-columns:1fr}.btn{width:100%}.media{grid-template-columns:1fr}.thumb{max-height:420px}.cards,.steps{grid-template-columns:1fr}.cards .feature:last-child,.steps .step:last-child{grid-column:auto}.section{padding:62px 0}.footer-grid{flex-direction:column}.terminal-bar{font-size:9px}.downloader{padding:13px}.hero-copy{font-size:16px}}
+    @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.001ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.001ms!important}.reveal{opacity:1;transform:none}}
   </style>
 </head>
 <body>
-  <main class="wrap">
-    <nav class="nav">
-      <div class="brand"><span class="logo"></span>InstaFlow</div>
-      <span class="badge">Public media only</span>
+  <div class="ambient"></div><div class="grid"></div><div class="noise"></div><div class="orb one"></div><div class="orb two"></div>
+
+  <header class="shell">
+    <nav class="nav" aria-label="Main navigation">
+      <a class="brand" href="#top" aria-label="InstaFlow home"><span class="brandmark" aria-hidden="true"></span><span>InstaFlow</span></a>
+      <div class="navlinks">
+        <a href="#features">Features</a><a href="#how">How it works</a><a href="#faq">FAQ</a>
+        <span class="navpill"><i class="dot"></i> System online</span>
+      </div>
     </nav>
+  </header>
 
-    <section class="hero">
-      <h1>Download Instagram Reels in seconds.</h1>
-      <p>Paste a public Instagram Reel or video post link. InstaFlow resolves the media securely through its own backend and prepares the file for download.</p>
+  <main id="top">
+    <section class="hero shell">
+      <div class="kicker"><span class="spark"></span> Fast public media downloader</div>
+      <h1><span class="grad">Instagram Reels.</span><br />Ready in seconds.</h1>
+      <p class="hero-copy">Paste a public Instagram Reel or video post link. InstaFlow analyzes the media, shows a preview and prepares the best available MP4 download — directly from your browser.</p>
+      <div class="hero-stats"><span class="stat">No app install</span><span class="stat">Public Reels & posts</span><span class="stat">Mobile ready</span><span class="stat">Fast MP4 workflow</span></div>
 
-      <div class="card">
-        <form id="form" class="form">
-          <input id="url" class="input" type="url" inputmode="url" autocomplete="off" placeholder="https://www.instagram.com/reel/..." required />
-          <button id="submit" class="btn" type="submit">Get video</button>
-        </form>
-        <div class="hint">Supports public Instagram Reel, Post and TV video URLs.</div>
-        <div id="status" class="status"></div>
+      <div class="downloader-wrap reveal">
+        <div class="beam"></div>
+        <div class="downloader">
+          <div class="terminal-bar"><div class="lights"><i></i><i></i><i></i></div><span>InstaFlow media resolver</span><span>v3</span></div>
+          <form id="form" class="form">
+            <div class="input-shell">
+              <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M10.8 13.2a4.4 4.4 0 0 0 6.2 0l2.1-2.1a4.4 4.4 0 0 0-6.2-6.2l-1.2 1.2"/><path d="M13.2 10.8a4.4 4.4 0 0 0-6.2 0l-2.1 2.1a4.4 4.4 0 0 0 6.2 6.2l1.2-1.2"/></svg>
+              <input id="url" class="input" type="url" inputmode="url" autocomplete="off" spellcheck="false" aria-label="Instagram Reel or video URL" placeholder="Paste https://www.instagram.com/reel/..." required />
+            </div>
+            <button id="submit" class="btn" type="submit">Get video</button>
+          </form>
+          <div class="hintrow"><span>Public media only</span><span class="mini-dot"></span><span>Reels, posts & legacy TV links</span><span class="mini-dot"></span><span>Use only media you may save</span></div>
+          <div id="status" class="status" role="status" aria-live="polite"></div>
 
-        <div id="result" class="result">
-          <div class="media">
-            <div class="thumb"><img id="thumb" alt="Instagram video preview" /></div>
-            <div class="info">
-              <div class="eyebrow">Instagram video</div>
-              <div id="title" class="title">Instagram video</div>
-              <div id="meta" class="meta"></div>
-              <a id="download" class="download" href="#" rel="nofollow">Download MP4</a>
+          <div id="result" class="result">
+            <div class="media">
+              <div class="thumb"><img id="thumb" alt="Instagram video preview" loading="lazy" /></div>
+              <div class="info">
+                <div class="eyebrow">Video ready</div>
+                <div id="title" class="result-title">Instagram video</div>
+                <div id="meta" class="meta"></div>
+                <a id="download" class="download" href="#" rel="nofollow">Download MP4</a>
+              </div>
             </div>
           </div>
         </div>
       </div>
-      <div class="foot">Only download media you own or are authorized to save.</div>
+    </section>
+
+    <section id="features" class="section shell reveal">
+      <div class="section-head"><div class="section-tag">Built for speed</div><h2>A cleaner way to save public video.</h2><p>InstaFlow keeps the workflow focused: paste, resolve, preview and download — without clutter.</p></div>
+      <div class="cards">
+        <article class="feature"><div class="icon">⚡</div><h3>Fast resolution</h3><p>The backend checks the public Instagram URL and prepares a downloadable media result with minimal steps.</p></article>
+        <article class="feature"><div class="icon">◈</div><h3>High-tech, simple UI</h3><p>A responsive glass interface designed to feel fast on desktop and mobile without heavy third-party libraries.</p></article>
+        <article class="feature"><div class="icon">↗</div><h3>Direct browser workflow</h3><p>No desktop software is required. Everything starts from one public Reel or video-post URL.</p></article>
+      </div>
+    </section>
+
+    <section id="how" class="section shell reveal">
+      <div class="section-head"><div class="section-tag">3 simple steps</div><h2>Paste. Resolve. Download.</h2><p>From an Instagram link to a prepared MP4 in a straightforward browser flow.</p></div>
+      <div class="steps">
+        <article class="step"><h3>Copy the link</h3><p>Open the public Reel or video post on Instagram and copy its share URL.</p></article>
+        <article class="step"><h3>Paste into InstaFlow</h3><p>Insert the URL above and select <strong>Get video</strong>. InstaFlow resolves available media information.</p></article>
+        <article class="step"><h3>Download MP4</h3><p>When the preview is ready, select <strong>Download MP4</strong> to save the prepared public video.</p></article>
+      </div>
+    </section>
+
+    <section id="faq" class="section shell reveal">
+      <div class="section-head"><div class="section-tag">FAQ</div><h2>Questions, answered.</h2><p>Useful details about supported links, access and responsible use.</p></div>
+      <div class="faq">
+        <details><summary>How do I download an Instagram Reel?</summary><p>Copy the public Reel URL from Instagram, paste it into the downloader above, select Get video and then use Download MP4 when the media is ready.</p></details>
+        <details><summary>Can InstaFlow download private Instagram content?</summary><p>No. InstaFlow is intended for public media you own or are authorized to save. It does not bypass private-account, subscriber or other access restrictions.</p></details>
+        <details><summary>Does it work on phones?</summary><p>Yes. The interface is responsive and works in modern mobile browsers. The final save behavior can vary slightly by browser and operating system.</p></details>
+        <details><summary>Do I need an Instagram account?</summary><p>The website does not ask visitors to enter Instagram login credentials. Availability can still depend on Instagram's public-access limits for a specific post.</p></details>
+        <details><summary>Is InstaFlow affiliated with Instagram?</summary><p>No. InstaFlow is an independent utility and is not endorsed by, sponsored by or affiliated with Instagram or Meta.</p></details>
+      </div>
+    </section>
+
+    <section class="section shell reveal">
+      <div class="cta"><h2>Ready to save your Reel?</h2><p>Use InstaFlow for public Instagram videos you own or have permission to download.</p><a href="#top">Open downloader ↑</a></div>
     </section>
   </main>
+
+  <footer>
+    <div class="shell footer-grid">
+      <div class="footer-copy"><strong>InstaFlow</strong><br />A browser-based utility for public Instagram video links. Only download media you own or are authorized to save. InstaFlow is not affiliated with Instagram or Meta.</div>
+      <div class="footer-links"><a href="#features">Features</a><a href="#how">How it works</a><a href="#faq">FAQ</a><a href="#top">Top</a></div>
+    </div>
+  </footer>
 
   <script>
     const API_BASE = 'https://instaflow-api-se8k.onrender.com';
@@ -65,58 +268,44 @@
     const meta = document.getElementById('meta');
     const download = document.getElementById('download');
 
-    function setStatus(message, isError=false){
-      status.textContent = message || '';
-      status.className = 'status' + (message ? ' show' : '') + (isError ? ' error' : '');
-    }
-
-    function formatDuration(value){
-      const n = Number(value || 0);
-      if(!n) return null;
-      const m = Math.floor(n/60), s = Math.floor(n%60);
-      return `${m}:${String(s).padStart(2,'0')}`;
-    }
+    const escapeHtml = (value) => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    function setStatus(message, isError=false){status.textContent=message||'';status.className='status'+(message?' show':'')+(isError?' error':'')}
+    function formatDuration(value){const n=Number(value||0);if(!n)return null;const m=Math.floor(n/60),s=Math.floor(n%60);return `${m}:${String(s).padStart(2,'0')}`}
 
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const url = input.value.trim();
       if(!url) return;
-
       result.classList.remove('show');
-      setStatus('Resolving video…');
+      setStatus('Analyzing Instagram video…');
       submit.disabled = true;
       submit.innerHTML = '<span class="spinner"></span>Resolving';
-
       try{
-        const response = await fetch(`${API_BASE}/api/resolve?url=${encodeURIComponent(url)}`, { method:'GET' });
+        const response = await fetch(`${API_BASE}/api/resolve?url=${encodeURIComponent(url)}`, {method:'GET'});
         const data = await response.json().catch(() => ({}));
-        if(!response.ok || !data.ok){
-          throw new Error(data.detail || data.error || 'Unable to resolve this Instagram video.');
-        }
+        if(!response.ok || !data.ok) throw new Error(data.detail || data.error || 'Unable to resolve this Instagram video.');
 
         title.textContent = data.title || 'Instagram video';
         thumb.src = data.thumbnail || '';
         thumb.style.display = data.thumbnail ? 'block' : 'none';
-
-        const items = [];
-        const duration = formatDuration(data.duration);
-        if(duration) items.push(duration);
-        if(data.width && data.height) items.push(`${data.width}×${data.height}`);
-        if(data.format) items.push(data.format);
-        if(data.uploader) items.push(data.uploader);
-        meta.innerHTML = items.map(x => `<span class="pill">${String(x).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</span>`).join('');
-
-        const relativeDownload = data.downloadUrl || `/api/download?url=${encodeURIComponent(url)}`;
-        download.href = relativeDownload.startsWith('http') ? relativeDownload : API_BASE + relativeDownload;
+        const items=[];
+        const duration=formatDuration(data.duration); if(duration)items.push(duration);
+        if(data.width&&data.height)items.push(`${data.width}×${data.height}`);
+        if(data.format)items.push(data.format);
+        if(data.uploader)items.push(data.uploader);
+        meta.innerHTML=items.map(x=>`<span class="pill">${escapeHtml(x)}</span>`).join('');
+        const relativeDownload=data.downloadUrl||`/api/download?url=${encodeURIComponent(url)}`;
+        download.href=relativeDownload.startsWith('http')?relativeDownload:API_BASE+relativeDownload;
         result.classList.add('show');
-        setStatus('Video ready. Tap Download MP4.');
+        setStatus('Video ready — select Download MP4.');
       }catch(error){
-        setStatus(error.message || 'Something went wrong.', true);
-      }finally{
-        submit.disabled = false;
-        submit.textContent = 'Get video';
-      }
+        const msg = error instanceof TypeError ? 'Could not reach the downloader. Please try again shortly.' : (error.message || 'Something went wrong.');
+        setStatus(msg,true);
+      }finally{submit.disabled=false;submit.textContent='Get video'}
     });
+
+    const reveal = new IntersectionObserver(entries => entries.forEach(entry => {if(entry.isIntersecting){entry.target.classList.add('visible');reveal.unobserve(entry.target)}}), {threshold:.12});
+    document.querySelectorAll('.reveal').forEach(el => reveal.observe(el));
   </script>
 </body>
 </html>
