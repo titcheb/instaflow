@@ -2,6 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const playlistHandler = require('./api/playlist.js');
+const streamHandler = require('./api/stream.js');
 
 const ROOT = __dirname;
 const PORT = Number(process.env.PORT || 10000);
@@ -37,7 +38,7 @@ const server = http.createServer(async (req, res) => {
   let url;
   try { url = new URL(req.url, base); } catch { res.writeHead(400); return res.end('Bad request'); }
 
-  if (url.pathname === '/api/playlist') {
+  if (url.pathname === '/api/playlist' || url.pathname === '/api/stream') {
     req.query = Object.fromEntries(url.searchParams.entries());
     res.status = function (code) { res.statusCode = code; return res; };
     res.json = function (payload) {
@@ -45,10 +46,12 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify(payload));
       return res;
     };
-    try { return await playlistHandler(req, res); }
+    const handler = url.pathname === '/api/playlist' ? playlistHandler : streamHandler;
+    try { return await handler(req, res); }
     catch (error) {
-      console.error('playlist handler error', error);
+      console.error(`${url.pathname} handler error`, error);
       if (!res.headersSent) res.statusCode = 500;
+      if (!res.headersSent) res.setHeader('Content-Type', 'application/json; charset=utf-8');
       return res.end(JSON.stringify({ error: 'Internal server error.' }));
     }
   }
