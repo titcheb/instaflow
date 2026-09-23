@@ -3,11 +3,12 @@
   const toast=msg=>{const el=$('toast');if(!el)return;el.textContent=msg;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),2400)};
   const icons={playlist:'▣',channels:'▤',basic:'✎',number:'↕',logo:'▧',epg:'▦',category:'▥',refresh:'⟳',trash:'♲',movies:'▦',series:'▰',users:'♣',auto:'⚙',player:'▶'};
   const COLLAPSE_KEY='nexa_sidebar_collapsed';
+  const isMobile=()=>innerWidth<=800||screen.width<=800||matchMedia('(max-device-width:800px)').matches||/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
 
   function currentPlaylist(){return document.querySelector('#playlistNav .nav-btn.active[data-playlist]')}
   function requirePlaylist(action){if(currentPlaylist()){action();return true}toast('Open a playlist first');return false}
   function flash(el){if(!el)return;el.classList.remove('nexa-focus-flash');void el.offsetWidth;el.classList.add('nexa-focus-flash');setTimeout(()=>el.classList.remove('nexa-focus-flash'),1200)}
-  function closeMobile(){if(innerWidth<=800)document.querySelector('.sidebar')?.classList.remove('open')}
+  function closeMobile(){if(isMobile())document.querySelector('.sidebar')?.classList.remove('open')}
   function hideNativeAdmin(){const a=$('adminNav');if(a)a.style.display='none'}
 
   function setTheme(night){
@@ -120,7 +121,7 @@
     const bottom=sidebar.querySelector('.sidebar-bottom');
     if(bottom&&!$('nexaThemeRow')){
       const row=document.createElement('label');row.id='nexaThemeRow';row.className='nexa-theme-row';row.innerHTML='<span id="nexaThemeLabel">NIGHT MODE</span><input id="nexaNightToggle" type="checkbox"><i></i>';
-      const version=document.createElement('div');version.className='nexa-version';version.textContent='V1.4.2';
+      const version=document.createElement('div');version.className='nexa-version';version.textContent='V1.4.4';
       bottom.insertAdjacentElement('afterbegin',version);bottom.insertAdjacentElement('afterbegin',row);
       $('nexaNightToggle').addEventListener('change',e=>setTheme(e.target.checked));
     }
@@ -132,6 +133,7 @@
     });
     const saved=localStorage.getItem('nexa_night_mode');setTheme(saved===null?false:saved==='1');
     setSidebarCollapsed(localStorage.getItem(COLLAPSE_KEY)==='1');
+    if(isMobile())document.querySelector('.sidebar')?.classList.remove('open');
   }
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(inject,0));else setTimeout(inject,0);
