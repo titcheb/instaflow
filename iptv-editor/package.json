@@ -1,17 +1,18 @@
 {
   "name": "nexa-iptv-editor",
-  "version": "1.4.8",
+  "version": "1.5.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "prepare:gateway": "cat gateway-a.jsfrag gateway-b.jsfrag gateway-preview.jsfrag gateway-c.jsfrag > gateway-runtime.js",
+    "prepare:gateway": "cat gateway-a.jsfrag gateway-b.jsfrag gateway-preview.jsfrag gateway-storage-sync.jsfrag gateway-c.jsfrag > gateway-runtime.js",
     "start": "npm run prepare:gateway && node gateway-runtime.js",
-    "check": "npm run prepare:gateway && node --check gateway-runtime.js && node --check server.js && node --check public/app.js && node --check public/admin.js && node --check public/import-preview.js && node --check public/features.js && node --check public/session-fix.js && node --check public/sidebar-ui.js && node --check public/mobile-ui.js && node --check public/admin-modal-fix.js"
+    "check": "npm run prepare:gateway && node --check gateway-runtime.js && node --check storage.js && node --check server.js && node --check public/app.js && node --check public/admin.js && node --check public/import-preview.js && node --check public/features.js && node --check public/session-fix.js && node --check public/sidebar-ui.js && node --check public/mobile-ui.js && node --check public/admin-modal-fix.js"
   },
   "engines": { "node": ">=20" },
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "express": "^4.21.2",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "redis": "^5.8.2"
   }
 }
