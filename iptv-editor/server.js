@@ -17,13 +17,23 @@ const DATA_FILE = path.join(DATA_DIR,'store.json');
 fs.mkdirSync(DATA_DIR,{recursive:true});
 
 let store={users:[],playlists:[],channels:[],seq:{user:1,playlist:1,channel:1}};
-try{if(fs.existsSync(DATA_FILE))store=JSON.parse(fs.readFileSync(DATA_FILE,'utf8'))}catch(e){console.error('Could not read store',e)}
+function reloadStore(){
+  try{
+    if(fs.existsSync(DATA_FILE)){
+      const fresh=JSON.parse(fs.readFileSync(DATA_FILE,'utf8'));
+      if(fresh&&typeof fresh==='object')store=fresh;
+    }
+  }catch(e){console.error('Could not reload store',e)}
+}
+reloadStore();
 function persist(){const tmp=DATA_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(store));fs.renameSync(tmp,DATA_FILE)}
 function next(kind){const n=store.seq[kind]||1;store.seq[kind]=n+1;return n}
 function now(){return new Date().toISOString()}
 
 app.use(express.json({limit:'30mb'}));
 app.use(express.static(path.join(__dirname,'public'),{etag:true,maxAge:'5m'}));
+app.use('/api',(req,res,next)=>{reloadStore();next()});
+app.use('/p',(req,res,next)=>{reloadStore();next()});
 function clean(s,max=5000){return String(s??'').trim().slice(0,max)}
 function tokenFor(user){return jwt.sign({uid:user.id,email:user.email},JWT_SECRET,{expiresIn:'14d'})}
 function auth(req,res,next){const raw=req.headers.authorization||'';try{req.user=jwt.verify(raw.startsWith('Bearer ')?raw.slice(7):'',JWT_SECRET);next()}catch{res.status(401).json({error:'Unauthorized'})}}
@@ -58,7 +68,7 @@ app.post('/api/playlists/:id/groups/rename',auth,(req,res)=>{const p=ownPlaylist
 
 app.get('/p/:token.m3u',(req,res)=>{const p=store.playlists.find(x=>x.public_token===req.params.token);if(!p)return res.status(404).send('Playlist not found');const channels=store.channels.filter(c=>String(c.playlist_id)===String(p.id)&&c.enabled).sort((a,b)=>a.sort_order-b.sort_order||a.id-b.id);res.set({'Content-Type':'application/x-mpegURL; charset=utf-8','Content-Disposition':`inline; filename="${p.name.replace(/[^a-z0-9_-]+/gi,'_')}.m3u"`,'Cache-Control':'no-store'}).send(m3uFor(p,channels))});
 app.get('/p/:token.json',(req,res)=>{const p=store.playlists.find(x=>x.public_token===req.params.token);if(!p)return res.status(404).json({error:'Playlist not found'});res.json({playlist:{id:p.id,name:p.name,epg_url:p.epg_url},channels:store.channels.filter(c=>String(c.playlist_id)===String(p.id)&&c.enabled).sort((a,b)=>a.sort_order-b.sort_order||a.id-b.id).map(({name,url,group_title,tvg_id,tvg_name,logo,user_agent,referrer})=>({name,url,group_title,tvg_id,tvg_name,logo,user_agent,referrer}))})});
-app.get('/health',(req,res)=>res.json({ok:true,playlists:store.playlists.length,channels:store.channels.length}));
+app.get('/health',(req,res)=>{reloadStore();res.json({ok:true,playlists:store.playlists.length,channels:store.channels.length})});
 app.get('*',(req,res)=>res.sendFile(path.join(__dirname,'public','index.html')));
 app.use((err,req,res,next)=>{console.error(err);res.status(500).json({error:err.name==='AbortError'?'Source request timed out.':(err.message||'Server error')})});
 app.listen(PORT,()=>console.log(`NEXA IPTV Editor listening on ${PORT}`));
