@@ -1,7 +1,32 @@
 const importPreviews=new Map();
-function pruneImportPreviews(){const t=Date.now();for(const [k,v] of importPreviews)if(!v||v.expires<t)importPreviews.delete(k);while(importPreviews.size>40)importPreviews.delete(importPreviews.keys().next().value)}
+const IMPORT_PREVIEW_DIR=path.join(__dirname,'data','import-previews');
+fs.mkdirSync(IMPORT_PREVIEW_DIR,{recursive:true});
+
+function removeImportPreview(token,preview=importPreviews.get(token)){
+  try{if(preview?.file&&fs.existsSync(preview.file))fs.unlinkSync(preview.file)}catch{}
+  importPreviews.delete(token);
+}
+function pruneImportPreviews(replaceUid=''){
+  const t=Date.now();
+  for(const [k,v] of importPreviews){
+    if(!v||v.expires<t||(replaceUid&&v.uid===replaceUid))removeImportPreview(k,v);
+  }
+  while(importPreviews.size>6){const k=importPreviews.keys().next().value;removeImportPreview(k)}
+}
 function categorySummary(channels,preferred=[]){const counts=new Map(),first=[];for(const c of channels){const g=clean(c.group_title||'Other',500)||'Other';if(!counts.has(g))first.push(g);counts.set(g,(counts.get(g)||0)+1)}const order=[];for(const g of preferred||[])if(counts.has(g)&&!order.includes(g))order.push(g);for(const g of first)if(!order.includes(g))order.push(g);return {order,categories:order.map(name=>({name,count:counts.get(name)||0}))}}
 function createPreviewToken(){return crypto.randomBytes(24).toString('hex')}
+function previewFileFor(token){return path.join(IMPORT_PREVIEW_DIR,`${token}.ndjson`)}
+function writePreviewChannels(file,channels){
+  const fd=fs.openSync(file,'w');
+  try{
+    let batch=[];
+    for(const c of channels){
+      batch.push(JSON.stringify(c));
+      if(batch.length>=400){fs.writeSync(fd,batch.join('\n')+'\n');batch=[]}
+    }
+    if(batch.length)fs.writeSync(fd,batch.join('\n')+'\n');
+  }finally{fs.closeSync(fd)}
+}
 function xtreamFromM3uUrl(sourceUrl){
   try{
     const u=new URL(sourceUrl);
@@ -16,16 +41,49 @@ function xtreamFromM3uUrl(sourceUrl){
   }catch{return null}
 }
 
+async function fetchXtreamDataPreview(server,username,password,output='ts'){
+  const base=normalizePanelBase(server),user=clean(username,500),pass=String(password||'').trim();
+  if(!user||!pass)throw new Error('Xtream username and password are required.');
+  await safeUrl(base);
+  const qs=`username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`;
+  const account=await fetchJson(`${base}/player_api.php?${qs}`);
+  if(account?.user_info&&String(account.user_info.auth)==='0')throw new Error('Xtream credentials were rejected by the provider.');
+  const catsRaw=await fetchJson(`${base}/player_api.php?${qs}&action=get_live_categories`);
+  const cats=Array.isArray(catsRaw)?catsRaw:[];
+  const catMap=new Map(cats.map(c=>[String(c.category_id),clean(c.category_name||'Other',500)]));
+  const streamsRaw=await fetchJson(`${base}/player_api.php?${qs}&action=get_live_streams`);
+  const streams=Array.isArray(streamsRaw)?streamsRaw:[];
+  if(!streams.length)throw new Error('Xtream API returned no live channels.');
+  const ext=output==='m3u8'?'m3u8':'ts',used=new Set();
+  for(let i=0;i<streams.length;i++){
+    const x=streams[i]||{},group=catMap.get(String(x.category_id))||'Other';used.add(group);
+    streams[i]={
+      name:clean(x.name||`Channel ${i+1}`,500),
+      url:`${base}/live/${encodeURIComponent(user)}/${encodeURIComponent(pass)}/${encodeURIComponent(x.stream_id)}.${ext}`,
+      group_title:group,
+      tvg_id:clean(x.epg_channel_id||'',500),
+      tvg_name:clean(x.name||'',500),
+      logo:clean(x.stream_icon||'',5000),
+      user_agent:'',referrer:'',enabled:true
+    };
+  }
+  const categoryOrder=cats.map(c=>catMap.get(String(c.category_id))).filter((g,i,a)=>g&&used.has(g)&&a.indexOf(g)===i);
+  for(const g of used)if(!categoryOrder.includes(g))categoryOrder.push(g);
+  return {base,user,pass,output:ext,channels:streams,categoryOrder};
+}
+
 app.post('/api/import/preview',async(req,res)=>{
-  const a=requireAuth(req,res);if(!a)return;
-  pruneImportPreviews();
+  await stopChildForHeavyWork();
   try{
+    const a=requireAuth(req,res);if(!a)return;
+    const uid=String(a.user.id);a.store=null;global.gc?.();
+    pruneImportPreviews(uid);
     const mode=req.body.mode==='xtream'?'xtream':'m3u',name=clean(req.body.name,200)||(mode==='xtream'?'Xtream playlist':'My playlist');
     let channels=[],categoryOrder=[],meta={mode,name},effectiveMode=mode;
     if(mode==='xtream'){
       const server=clean(req.body.server,5000),username=clean(req.body.username,500),password=String(req.body.password||''),output=req.body.output==='m3u8'?'m3u8':'ts';
       if(!server||!username||!password)return res.status(400).json({error:'Server, username and password are required.'});
-      const d=await fetchXtreamData(server,username,password,output);channels=d.channels;categoryOrder=d.categoryOrder;
+      const d=await fetchXtreamDataPreview(server,username,password,output);channels=d.channels;categoryOrder=d.categoryOrder;
       meta={mode,name,epgUrl:clean(req.body.epgUrl,5000)||`${d.base}/xmltv.php?username=${encodeURIComponent(d.user)}&password=${encodeURIComponent(d.pass)}`,xtream:{server:d.base,username:d.user,password:d.pass,output:d.output}};
     }else{
       const sourceUrl=clean(req.body.sourceUrl,5000),epgUrl=clean(req.body.epgUrl,5000);let text=String(req.body.m3uText||'');
@@ -36,7 +94,7 @@ app.post('/api/import/preview',async(req,res)=>{
           const fallback=xtreamFromM3uUrl(sourceUrl);
           if(!fallback)throw sourceError;
           try{
-            const d=await fetchXtreamData(fallback.server,fallback.username,fallback.password,fallback.output);
+            const d=await fetchXtreamDataPreview(fallback.server,fallback.username,fallback.password,fallback.output);
             channels=d.channels;categoryOrder=d.categoryOrder;effectiveMode='xtream';
             meta={mode:'xtream',name,sourceUrl,epgUrl:epgUrl||`${d.base}/xmltv.php?username=${encodeURIComponent(d.user)}&password=${encodeURIComponent(d.pass)}`,xtream:{server:d.base,username:d.user,password:d.pass,output:d.output},importedFromM3uUrl:true};
           }catch(fallbackError){
@@ -50,25 +108,47 @@ app.post('/api/import/preview',async(req,res)=>{
       }
       if(!channels.length){
         if(!text)return res.status(400).json({error:'Paste/upload an M3U or provide a source URL.'});
-        channels=parseM3u(text);if(!channels.length)return res.status(400).json({error:'No HTTP/HTTPS channels were found in this playlist.'});
+        channels=parseM3u(text);text='';if(!channels.length)return res.status(400).json({error:'No HTTP/HTTPS channels were found in this playlist.'});
         categoryOrder=categorySummary(channels).order;meta={mode,name,sourceUrl,epgUrl};
       }
     }
-    const summary=categorySummary(channels,categoryOrder),previewToken=createPreviewToken();
-    importPreviews.set(previewToken,{uid:String(a.user.id),expires:Date.now()+15*60*1000,channels,categoryOrder:summary.order,meta});
-    res.json({previewToken,totalChannels:channels.length,totalCategories:summary.categories.length,categories:summary.categories,expiresIn:900,mode:effectiveMode,fallback:!!meta.importedFromM3uUrl});
+    const summary=categorySummary(channels,categoryOrder),previewToken=createPreviewToken(),file=previewFileFor(previewToken),totalChannels=channels.length;
+    writePreviewChannels(file,channels);
+    channels.length=0;global.gc?.();
+    importPreviews.set(previewToken,{uid,expires:Date.now()+15*60*1000,file,totalChannels,categoryOrder:summary.order,meta});
+    res.json({previewToken,totalChannels,totalCategories:summary.categories.length,categories:summary.categories,expiresIn:900,mode:effectiveMode,fallback:!!meta.importedFromM3uUrl});
   }catch(e){if(e instanceof UpstreamError)return res.status(502).json({error:`The IPTV provider returned HTTP ${e.status}. It may be blocking cloud/server access.`,upstreamStatus:e.status});res.status(502).json({error:e.message||'Could not preview this playlist.'})}
+  finally{restartChild()}
 });
 
-app.post('/api/import/commit',(req,res)=>{
-  const a=requireAuth(req,res);if(!a)return;pruneImportPreviews();
-  const token=clean(req.body.previewToken,200),preview=importPreviews.get(token);if(!preview||preview.expires<Date.now())return res.status(410).json({error:'Import preview expired. Preview the playlist again.'});
-  if(preview.uid!==String(a.user.id))return res.status(403).json({error:'This preview belongs to another account.'});
-  const requested=Array.isArray(req.body.categories)?req.body.categories.map(x=>clean(x,500)).filter(Boolean):[],selected=new Set(requested);if(!selected.size)return res.status(400).json({error:'Select at least one category to import.'});
-  const allowed=new Set(preview.categoryOrder),chosen=preview.categoryOrder.filter(g=>selected.has(g)&&allowed.has(g));if(!chosen.length)return res.status(400).json({error:'None of the selected categories are available in this preview.'});
-  const channels=preview.channels.filter(c=>selected.has(c.group_title||'Other'));if(!channels.length)return res.status(400).json({error:'The selected categories contain no channels.'});
-  const s=a.store,m=preview.meta,p={id:next(s,'playlist'),user_id:a.user.id,name:m.name,source_url:m.mode==='m3u'?(m.sourceUrl||''):'',epg_url:m.epgUrl||'',public_token:crypto.randomBytes(18).toString('hex'),category_order:chosen,created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
-  if(m.mode==='xtream'){p.source_type='xtream';p.xtream=m.xtream;if(m.sourceUrl)p.original_m3u_url=m.sourceUrl}
-  s.playlists.push(p);let order=0;for(const c of channels)s.channels.push({id:next(s,'channel'),playlist_id:p.id,...c,sort_order:order++,created_at:new Date().toISOString(),updated_at:new Date().toISOString()});
-  writeStore(s);importPreviews.delete(token);restartChild();res.json({...p,channel_count:channels.length,group_count:chosen.length});
+app.post('/api/import/commit',async(req,res)=>{
+  await stopChildForHeavyWork();
+  let s=null,a=null;
+  try{
+    a=requireAuth(req,res);if(!a)return;
+    pruneImportPreviews();
+    const token=clean(req.body.previewToken,200),preview=importPreviews.get(token);if(!preview||preview.expires<Date.now())return res.status(410).json({error:'Import preview expired. Preview the playlist again.'});
+    if(preview.uid!==String(a.user.id))return res.status(403).json({error:'This preview belongs to another account.'});
+    const requested=Array.isArray(req.body.categories)?req.body.categories.map(x=>clean(x,500)).filter(Boolean):[],selected=new Set(requested);if(!selected.size)return res.status(400).json({error:'Select at least one category to import.'});
+    const allowed=new Set(preview.categoryOrder),chosen=preview.categoryOrder.filter(g=>selected.has(g)&&allowed.has(g));if(!chosen.length)return res.status(400).json({error:'None of the selected categories are available in this preview.'});
+    s=a.store;const m=preview.meta,p={id:next(s,'playlist'),user_id:a.user.id,name:m.name,source_url:m.mode==='m3u'?(m.sourceUrl||''):'',epg_url:m.epgUrl||'',public_token:crypto.randomBytes(18).toString('hex'),category_order:chosen,created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+    if(m.mode==='xtream'){p.source_type='xtream';p.xtream=m.xtream;if(m.sourceUrl)p.original_m3u_url=m.sourceUrl}
+    s.playlists.push(p);
+    const input=fs.createReadStream(preview.file,{encoding:'utf8'}),rl=createInterface({input,crlfDelay:Infinity});
+    let order=0,count=0;const now=new Date().toISOString();
+    for await(const line of rl){
+      if(!line)continue;
+      const c=JSON.parse(line),group=c.group_title||'Other';
+      if(!selected.has(group))continue;
+      c.id=next(s,'channel');c.playlist_id=p.id;c.sort_order=order++;c.created_at=now;c.updated_at=now;
+      s.channels.push(c);count++;
+    }
+    if(!count){s.playlists=s.playlists.filter(x=>x!==p);return res.status(400).json({error:'The selected categories contain no channels.'})}
+    const remoteWrite=writeStore(s);
+    a.store=null;s=null;global.gc?.();
+    await remoteWrite;
+    removeImportPreview(token,preview);
+    res.json({...p,channel_count:count,group_count:chosen.length});
+  }catch(e){res.status(500).json({error:e.message||'Could not finish this import.'})}
+  finally{if(a)a.store=null;s=null;global.gc?.();restartChild()}
 });
