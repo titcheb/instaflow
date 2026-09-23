@@ -9,6 +9,7 @@ import path from 'path';
 import http from 'http';
 import https from 'https';
 import { spawn } from 'child_process';
+import { createInterface } from 'readline';
 import { fileURLToPath } from 'url';
 import { initStorage, readStoreSync, writeStoreSync, syncRemoteFromDisk, closeStorage } from './storage.js';
 
@@ -34,6 +35,18 @@ function restartChild(){
     console.error('Editor child exited',code,signal);
     setTimeout(restartChild,1200);
   });
+}
+async function stopChildForHeavyWork(){
+  const c=child;
+  if(!c||c.exitCode!==null)return;
+  await new Promise(resolve=>{
+    let done=false;
+    const finish=()=>{if(done)return;done=true;clearTimeout(timer);resolve()};
+    const timer=setTimeout(finish,2500);
+    c.once('exit',finish);
+    try{c.kill('SIGTERM')}catch{finish()}
+  });
+  if(child===c)child=null;
 }
 normalizeStore();restartChild();
 process.on('SIGTERM',async()=>{if(child&&child.exitCode===null&&!child.killed)child.kill('SIGTERM');await syncRemoteFromDisk().catch(()=>{});await closeStorage();process.exit(0)});
