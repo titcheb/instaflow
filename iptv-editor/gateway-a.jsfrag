@@ -10,20 +10,20 @@ import http from 'http';
 import https from 'https';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
+import { initStorage, readStoreSync, writeStoreSync, syncRemoteFromDisk, closeStorage } from './storage.js';
 
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
 const app=express();
 const PORT=Number(process.env.PORT||10000);
 const CHILD_PORT=PORT+1;
 const JWT_SECRET=process.env.JWT_SECRET||'nexa-editor-beta-'+crypto.createHash('sha256').update(process.env.RENDER_SERVICE_ID||'local').digest('hex');
-const DATA_DIR=path.join(__dirname,'data');
-const DATA_FILE=path.join(DATA_DIR,'store.json');
 const MAX=25*1024*1024;
-fs.mkdirSync(DATA_DIR,{recursive:true});
+
+await initStorage();
 
 let child;
-function readStore(){try{return JSON.parse(fs.readFileSync(DATA_FILE,'utf8'))}catch{return{users:[],playlists:[],channels:[],seq:{user:1,playlist:1,channel:1}}}}
-function writeStore(store){const tmp=DATA_FILE+'.gateway.tmp';fs.writeFileSync(tmp,JSON.stringify(store));fs.renameSync(tmp,DATA_FILE)}
+function readStore(){return readStoreSync()}
+function writeStore(store){writeStoreSync(store)}
 function normalizeStore(){const s=readStore();s.users=Array.isArray(s.users)?s.users:[];s.playlists=Array.isArray(s.playlists)?s.playlists:[];s.channels=Array.isArray(s.channels)?s.channels:[];s.seq=s.seq||{};const maxima={user:Math.max(0,...s.users.map(x=>+x.id||0)),playlist:Math.max(0,...s.playlists.map(x=>+x.id||0)),channel:Math.max(0,...s.channels.map(x=>+x.id||0))};for(const k of Object.keys(maxima))if(!s.seq[k]||s.seq[k]<=maxima[k])s.seq[k]=maxima[k]+1;s.users.forEach(u=>{if(!u.role)u.role='user';if(typeof u.disabled!=='boolean')u.disabled=false});if(s.users.length&&!s.users.some(u=>u.role==='admin'))[...s.users].sort((a,b)=>(+a.id)-(+b.id))[0].role='admin';writeStore(s)}
 function restartChild(){
   if(child&&child.exitCode===null&&!child.killed)return;
@@ -36,4 +36,4 @@ function restartChild(){
   });
 }
 normalizeStore();restartChild();
-process.on('SIGTERM',()=>{if(child&&child.exitCode===null&&!child.killed)child.kill('SIGTERM');process.exit(0)});
+process.on('SIGTERM',async()=>{if(child&&child.exitCode===null&&!child.killed)child.kill('SIGTERM');await syncRemoteFromDisk().catch(()=>{});await closeStorage();process.exit(0)});
