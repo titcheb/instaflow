@@ -1,6 +1,6 @@
 (()=>{
   const $=id=>document.getElementById(id);
-  const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[c]));
+  const esc=s=>String(s??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','\"':'&quot;'}[c]));
   const ctx={me:null,users:[],stats:null,lastToken:'',resetUser:null};
   const token=()=>localStorage.getItem('nexa_editor_token')||'';
   async function api(url,opts={}){const t=token();const headers={'Content-Type':'application/json',...(opts.headers||{})};if(t)headers.Authorization=`Bearer ${t}`;const r=await fetch(url,{...opts,headers});let d={};try{d=await r.json()}catch{}if(!r.ok)throw new Error(d.error||`HTTP ${r.status}`);return d}
@@ -35,7 +35,7 @@
   }
 
   function bind(){
-    $('adminNav')?.addEventListener('click',showAdmin);
+    $('adminNav')?.addEventListener('click',()=>openAdmin());
     $('createUserBtn')?.addEventListener('click',()=>{ $('createUserForm').reset();$('createUserError').textContent='';$('createUserDialog').showModal() });
     $('adminSearch')?.addEventListener('input',renderUsers);
     $('createUserForm')?.addEventListener('submit',createUser);
@@ -44,8 +44,40 @@
   }
 
   function hideAdmin(){$('adminView')?.classList.add('hidden');$('adminNav')?.classList.remove('active')}
-  async function showAdmin(){if(ctx.me?.role!=='admin')return;$('dashboardView')?.classList.add('hidden');$('editorView')?.classList.add('hidden');$('addChannelTop')?.classList.add('hidden');$('adminView')?.classList.remove('hidden');document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));$('adminNav')?.classList.add('active');if($('pageTitle'))$('pageTitle').textContent='Admin';if($('pageEyebrow'))$('pageEyebrow').textContent='USER MANAGEMENT';await loadAdmin()}
-  async function sync(){const t=token();if(!t){ctx.me=null;ctx.lastToken='';$('adminNav')?.classList.add('hidden');$('adminRole')?.classList.add('hidden');hideAdmin();return}if(t===ctx.lastToken&&ctx.me)return;ctx.lastToken=t;try{ctx.me=await api('/api/me');const admin=ctx.me.role==='admin';$('adminNav')?.classList.toggle('hidden',!admin);$('adminRole').textContent=(ctx.me.role||'user').toUpperCase();$('adminRole').classList.remove('hidden');if(!admin)hideAdmin()}catch{ctx.me=null}}
+  async function showAdmin(){
+    $('dashboardView')?.classList.add('hidden');
+    $('editorView')?.classList.add('hidden');
+    $('addChannelTop')?.classList.add('hidden');
+    $('adminView')?.classList.remove('hidden');
+    document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
+    $('adminNav')?.classList.add('active');
+    if($('pageTitle'))$('pageTitle').textContent='User management';
+    if($('pageEyebrow'))$('pageEyebrow').textContent='ADMIN';
+    await loadAdmin();
+  }
+  async function sync(force=false){
+    const t=token();
+    if(!t){ctx.me=null;ctx.lastToken='';$('adminNav')?.classList.add('hidden');$('adminRole')?.classList.add('hidden');hideAdmin();return null}
+    if(!force&&t===ctx.lastToken&&ctx.me)return ctx.me;
+    ctx.lastToken=t;
+    try{
+      ctx.me=await api('/api/me');
+      const admin=ctx.me.role==='admin';
+      $('adminNav')?.classList.toggle('hidden',!admin);
+      if($('adminRole')){$('adminRole').textContent=(ctx.me.role||'user').toUpperCase();$('adminRole').classList.remove('hidden')}
+      if(!admin)hideAdmin();
+      return ctx.me;
+    }catch(e){ctx.me=null;throw e}
+  }
+  async function openAdmin(){
+    try{
+      const me=await sync(true);
+      if(!me||me.role!=='admin'){toast('Admin access required');return false}
+      document.body.classList.remove('nexa-category-mode');
+      await showAdmin();
+      return true;
+    }catch(e){toast(e.message||'Could not open user management');return false}
+  }
   async function loadAdmin(){try{const [users,stats]=await Promise.all([api('/api/admin/users'),api('/api/admin/stats')]);ctx.users=users;ctx.stats=stats;$('adminStatUsers').textContent=stats.users;$('adminStatActive').textContent=stats.active_users;$('adminStatPlaylists').textContent=stats.playlists;$('adminStatChannels').textContent=stats.channels;renderUsers()}catch(e){toast(e.message)}}
   function renderUsers(){const q=($('adminSearch')?.value||'').trim().toLowerCase();const list=ctx.users.filter(u=>!q||u.email.toLowerCase().includes(q)||u.role.includes(q));$('adminEmpty')?.classList.toggle('hidden',list.length>0);$('adminUserRows').innerHTML=list.map(u=>{const self=String(u.id)===String(ctx.me?.id),d=u.created_at?new Date(u.created_at).toLocaleDateString():'—';return `<tr><td><div class="admin-user"><span class="avatar">${esc((u.email||'?')[0].toUpperCase())}</span><div><b>${esc(u.email)}</b><small>#${u.id}${self?' · You':''}</small></div></div></td><td><span class="role-chip ${u.role==='admin'?'admin':''}">${esc(u.role)}</span></td><td>${u.playlist_count}</td><td>${u.channel_count}</td><td>${esc(d)}</td><td><span class="status ${u.disabled?'':'on'}">${u.disabled?'Suspended':'Active'}</span></td><td><div class="row-actions admin-actions"><button class="tiny" data-role="${u.id}" ${self?'disabled':''}>${u.role==='admin'?'Make user':'Make admin'}</button><button class="tiny" data-status="${u.id}" ${self?'disabled':''}>${u.disabled?'Activate':'Suspend'}</button><button class="tiny" data-reset="${u.id}">Password</button><button class="tiny danger-text" data-delete="${u.id}" ${self?'disabled':''}>Delete</button></div></td></tr>`}).join('');
     $('adminUserRows').querySelectorAll('[data-role]').forEach(b=>b.onclick=()=>toggleRole(b.dataset.role));$('adminUserRows').querySelectorAll('[data-status]').forEach(b=>b.onclick=()=>toggleStatus(b.dataset.status));$('adminUserRows').querySelectorAll('[data-reset]').forEach(b=>b.onclick=()=>openReset(b.dataset.reset));$('adminUserRows').querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>deleteUser(b.dataset.delete));
@@ -57,6 +89,7 @@
   async function resetPassword(e){e.preventDefault();if(!ctx.resetUser)return;try{await api(`/api/admin/users/${ctx.resetUser.id}/reset-password`,{method:'POST',body:JSON.stringify({password:$('resetPasswordValue').value})});$('resetPasswordDialog').close();toast('Password updated')}catch(err){$('resetPasswordError').textContent=err.message}}
   async function deleteUser(id){const u=ctx.users.find(x=>String(x.id)===String(id));if(!u||!confirm(`Delete ${u.email}, all playlists and all channels?`))return;try{await api(`/api/admin/users/${id}`,{method:'DELETE'});await loadAdmin();toast('User deleted')}catch(e){toast(e.message)}}
 
+  window.NexaAdmin={open:openAdmin,close:hideAdmin,sync:()=>sync(true)};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',inject);else inject();
-  setInterval(sync,1200);setTimeout(sync,100);
+  setInterval(()=>sync().catch(()=>{}),1200);setTimeout(()=>sync(true).catch(()=>{}),100);
 })();
