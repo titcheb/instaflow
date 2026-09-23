@@ -65,7 +65,9 @@ function scheduleRemoteRaw(raw,counts={users:0,playlists:0,channels:0}){
 export function writeStoreSync(store){
   const raw=JSON.stringify(store);
   writeLocalRaw(raw);
-  void scheduleRemoteRaw(raw,countsOf(store)).catch(e=>console.error('[storage] remote write failed:',e.message));
+  const remoteWrite=scheduleRemoteRaw(raw,countsOf(store));
+  void remoteWrite.catch(e=>console.error('[storage] remote write failed:',e.message));
+  return remoteWrite;
 }
 
 export async function syncRemoteFromDisk(){
@@ -97,8 +99,7 @@ export async function initStorage(){
     }catch(e){console.error('[storage] invalid remote state:',e.message)}
   }
   const local=readStoreSync();
-  writeStoreSync(local);
-  await flushPromise.catch(()=>{});
+  await writeStoreSync(local);
   console.log('[storage] initialized remote state from local store');
 }
 
