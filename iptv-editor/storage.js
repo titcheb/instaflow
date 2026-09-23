@@ -16,16 +16,21 @@ let ready=false;
 let flushPromise=Promise.resolve();
 let flushing=false;
 let pendingRemote=null;
+let memoryStore=null;
 
 function emptyStore(){return{users:[],playlists:[],channels:[],seq:{user:1,playlist:1,channel:1}}}
 function countsOf(store){return{users:store.users?.length||0,playlists:store.playlists?.length||0,channels:store.channels?.length||0}}
 
-export function readStoreSync(){
+function loadLocalOnce(){
+  if(memoryStore)return memoryStore;
   try{
     const parsed=JSON.parse(fs.readFileSync(DATA_FILE,'utf8'));
-    return parsed&&typeof parsed==='object'?parsed:emptyStore();
-  }catch{return emptyStore()}
+    memoryStore=parsed&&typeof parsed==='object'?parsed:emptyStore();
+  }catch{memoryStore=emptyStore()}
+  return memoryStore;
 }
+
+export function readStoreSync(){return loadLocalOnce()}
 
 function writeLocalRaw(raw){
   const tmp=DATA_FILE+'.tmp';
@@ -63,6 +68,7 @@ function scheduleRemoteRaw(raw,counts={users:0,playlists:0,channels:0}){
 }
 
 export function writeStoreSync(store){
+  memoryStore=store;
   const raw=JSON.stringify(store);
   writeLocalRaw(raw);
   const remoteWrite=scheduleRemoteRaw(raw,countsOf(store));
@@ -72,15 +78,14 @@ export function writeStoreSync(store){
 
 export async function syncRemoteFromDisk(){
   try{
-    const raw=fs.readFileSync(DATA_FILE,'utf8');
-    let counts={users:0,playlists:0,channels:0};
-    try{counts=countsOf(JSON.parse(raw))}catch{}
-    await scheduleRemoteRaw(raw,counts);
+    const store=loadLocalOnce();
+    const raw=JSON.stringify(store);
+    await scheduleRemoteRaw(raw,countsOf(store));
   }catch{}
 }
 
 export async function initStorage(){
-  if(!REDIS_URL){console.warn('[storage] REDIS_URL missing; using local ephemeral storage');return}
+  if(!REDIS_URL){console.warn('[storage] REDIS_URL missing; using local ephemeral storage');loadLocalOnce();return}
   client=createClient({url:REDIS_URL,socket:{connectTimeout:8000,reconnectStrategy:r=>Math.min(1000+r*250,5000)}});
   client.on('error',e=>console.error('[storage] redis error:',e.message));
   await client.connect();
@@ -90,6 +95,7 @@ export async function initStorage(){
     try{
       const raw=decodeRaw(remote),parsed=JSON.parse(raw);
       if(parsed&&typeof parsed==='object'){
+        memoryStore=parsed;
         writeLocalRaw(raw);
         const counts=countsOf(parsed);
         console.log(`[storage] restored remote state: ${counts.users} users, ${counts.playlists} playlists, ${counts.channels} channels${remote.startsWith('gz:')?' (compressed)':''}`);
@@ -98,7 +104,7 @@ export async function initStorage(){
       }
     }catch(e){console.error('[storage] invalid remote state:',e.message)}
   }
-  const local=readStoreSync();
+  const local=loadLocalOnce();
   await writeStoreSync(local);
   console.log('[storage] initialized remote state from local store');
 }
