@@ -13,9 +13,12 @@ fs.mkdirSync(DATA_DIR,{recursive:true});
 
 let client=null;
 let ready=false;
-let lastWrite=Promise.resolve();
+let flushPromise=Promise.resolve();
+let flushing=false;
+let pendingRemote=null;
 
 function emptyStore(){return{users:[],playlists:[],channels:[],seq:{user:1,playlist:1,channel:1}}}
+function countsOf(store){return{users:store.users?.length||0,playlists:store.playlists?.length||0,channels:store.channels?.length||0}}
 
 export function readStoreSync(){
   try{
@@ -24,45 +27,54 @@ export function readStoreSync(){
   }catch{return emptyStore()}
 }
 
-function writeLocal(store){
+function writeLocalRaw(raw){
   const tmp=DATA_FILE+'.tmp';
-  fs.writeFileSync(tmp,JSON.stringify(store));
+  fs.writeFileSync(tmp,raw);
   fs.renameSync(tmp,DATA_FILE);
 }
 
-function encodeStore(store){
-  const raw=Buffer.from(JSON.stringify(store),'utf8');
+function encodeRaw(raw){
   const gz=gzipSync(raw,{level:6});
-  return {payload:'gz:'+gz.toString('base64'),rawBytes:raw.length,storedBytes:gz.length};
+  return {payload:'gz:'+gz.toString('base64'),rawBytes:Buffer.byteLength(raw),storedBytes:gz.length};
 }
 
-function decodeStore(payload){
+function decodeRaw(payload){
   if(!payload)return null;
-  if(payload.startsWith('gz:')){
-    const buf=Buffer.from(payload.slice(3),'base64');
-    return JSON.parse(gunzipSync(buf).toString('utf8'));
-  }
-  return JSON.parse(payload);
+  if(payload.startsWith('gz:'))return gunzipSync(Buffer.from(payload.slice(3),'base64')).toString('utf8');
+  return payload;
 }
 
-async function pushRemote(store){
-  if(!ready||!client?.isOpen)return;
-  const encoded=encodeStore(store);
-  lastWrite=lastWrite.catch(()=>{}).then(async()=>{
-    await client.set(REDIS_KEY,encoded.payload);
-    console.log(`[storage] saved compressed state: ${store.users?.length||0} users, ${store.playlists?.length||0} playlists, ${store.channels?.length||0} channels, ${(encoded.rawBytes/1048576).toFixed(1)}MB -> ${(encoded.storedBytes/1048576).toFixed(1)}MB`);
-  });
-  await lastWrite;
+function scheduleRemoteRaw(raw,counts={users:0,playlists:0,channels:0}){
+  if(!ready||!client?.isOpen)return Promise.resolve();
+  pendingRemote={raw,counts};
+  if(flushing)return flushPromise;
+  flushing=true;
+  flushPromise=(async()=>{
+    try{
+      while(pendingRemote){
+        const job=pendingRemote;pendingRemote=null;
+        const encoded=encodeRaw(job.raw);
+        await client.set(REDIS_KEY,encoded.payload);
+        console.log(`[storage] saved compressed state: ${job.counts.users} users, ${job.counts.playlists} playlists, ${job.counts.channels} channels, ${(encoded.rawBytes/1048576).toFixed(1)}MB -> ${(encoded.storedBytes/1048576).toFixed(1)}MB`);
+      }
+    }finally{flushing=false}
+  })();
+  return flushPromise;
 }
 
 export function writeStoreSync(store){
-  writeLocal(store);
-  void pushRemote(store).catch(e=>console.error('[storage] remote write failed:',e.message));
+  const raw=JSON.stringify(store);
+  writeLocalRaw(raw);
+  void scheduleRemoteRaw(raw,countsOf(store)).catch(e=>console.error('[storage] remote write failed:',e.message));
 }
 
 export async function syncRemoteFromDisk(){
-  const s=readStoreSync();
-  await pushRemote(s);
+  try{
+    const raw=fs.readFileSync(DATA_FILE,'utf8');
+    let counts={users:0,playlists:0,channels:0};
+    try{counts=countsOf(JSON.parse(raw))}catch{}
+    await scheduleRemoteRaw(raw,counts);
+  }catch{}
 }
 
 export async function initStorage(){
@@ -74,20 +86,22 @@ export async function initStorage(){
   const remote=await client.get(REDIS_KEY);
   if(remote){
     try{
-      const parsed=decodeStore(remote);
+      const raw=decodeRaw(remote),parsed=JSON.parse(raw);
       if(parsed&&typeof parsed==='object'){
-        writeLocal(parsed);
-        console.log(`[storage] restored remote state: ${parsed.users?.length||0} users, ${parsed.playlists?.length||0} playlists, ${parsed.channels?.length||0} channels${remote.startsWith('gz:')?' (compressed)':''}`);
-        if(!remote.startsWith('gz:'))void pushRemote(parsed).catch(e=>console.error('[storage] compression migration failed:',e.message));
+        writeLocalRaw(raw);
+        const counts=countsOf(parsed);
+        console.log(`[storage] restored remote state: ${counts.users} users, ${counts.playlists} playlists, ${counts.channels} channels${remote.startsWith('gz:')?' (compressed)':''}`);
+        if(!remote.startsWith('gz:'))void scheduleRemoteRaw(raw,counts).catch(e=>console.error('[storage] compression migration failed:',e.message));
         return;
       }
     }catch(e){console.error('[storage] invalid remote state:',e.message)}
   }
   const local=readStoreSync();
-  await pushRemote(local);
+  writeStoreSync(local);
+  await flushPromise.catch(()=>{});
   console.log('[storage] initialized remote state from local store');
 }
 
 export async function closeStorage(){
-  try{await lastWrite.catch(()=>{});if(client?.isOpen)await client.quit()}catch{}
+  try{await flushPromise.catch(()=>{});if(client?.isOpen)await client.quit()}catch{}
 }
