@@ -1,0 +1,11 @@
+// Persist every successful proxied mutation after the child backend has written store.json.
+const __nexaBaseProxy=proxy;
+proxy=function(req,res,bodyOverride){
+  const mutating=!['GET','HEAD','OPTIONS'].includes(String(req.method||'GET').toUpperCase());
+  if(mutating){
+    res.once('finish',()=>{
+      if(res.statusCode<400)syncRemoteFromDisk().catch(e=>console.error('[storage] proxy sync failed:',e.message));
+    });
+  }
+  return __nexaBaseProxy(req,res,bodyOverride);
+};
