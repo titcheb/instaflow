@@ -7,6 +7,7 @@
   function requirePlaylist(action){if(currentPlaylist()){action();return true}toast('Open a playlist first');return false}
   function flash(el){if(!el)return;el.classList.remove('nexa-focus-flash');void el.offsetWidth;el.classList.add('nexa-focus-flash');setTimeout(()=>el.classList.remove('nexa-focus-flash'),1200)}
   function closeMobile(){if(innerWidth<=800)document.querySelector('.sidebar')?.classList.remove('open')}
+  function hideNativeAdmin(){const a=$('adminNav');if(a)a.style.display='none'}
 
   function setTheme(night){
     document.body.classList.toggle('nexa-light',!night);
@@ -43,7 +44,7 @@
     const number=makeButton({icon:icons.number,label:'Number editor',cls:'nexa-subitem',soon:true});number.onclick=()=>toast('Number editor is next module');
     const logo=makeButton({icon:icons.logo,label:'Logo editor',cls:'nexa-subitem',soon:true});logo.onclick=()=>toast('Logo editor is next module');
     const epg=makeButton({icon:icons.epg,label:'EPG editor',cls:'nexa-subitem'});
-    epg.onclick=()=>requirePlaylist(()=>{ $('playlistSettings')?.click();setTimeout(()=>{const x=$('settingsEpg');x?.focus();flash(x?.closest('label'))},80);closeMobile()});
+    epg.onclick=()=>requirePlaylist(()=>{$('playlistSettings')?.click();setTimeout(()=>{const x=$('settingsEpg');x?.focus();flash(x?.closest('label'))},80);closeMobile()});
     const category=makeButton({icon:icons.category,label:'Category editor',cls:'nexa-subitem'});
     category.onclick=()=>requirePlaylist(()=>{const el=document.querySelector('.groups-panel');el?.scrollIntoView({behavior:'smooth',block:'start'});flash(el);closeMobile()});
     const manual=makeButton({icon:icons.refresh,label:'Manual updater',cls:'nexa-subitem'});
@@ -74,9 +75,8 @@
       $('nexaNightToggle').addEventListener('change',e=>setTheme(e.target.checked));
     }
 
-    document.addEventListener('click',e=>{
-      if(e.target.closest('[data-playlist]')){basic.classList.add('active');channelsBtn.classList.add('active')}
-    });
+    new MutationObserver(hideNativeAdmin).observe(nav,{childList:true,subtree:true});hideNativeAdmin();
+    document.addEventListener('click',e=>{if(e.target.closest('[data-playlist]')){basic.classList.add('active');channelsBtn.classList.add('active')}});
     const saved=localStorage.getItem('nexa_night_mode');setTheme(saved===null?false:saved==='1');
   }
 
