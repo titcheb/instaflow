@@ -1,114 +1,111 @@
 (()=>{
   const nativeFetch=window.fetch.bind(window);
-  const state={playlistId:null,page:1,limit:250,pagination:null,groups:[],timer:null};
+  const state={playlistId:null,page:1,limit:250,pagination:null,groups:[],openGroup:'',timer:null,searching:false};
 
-  function isPlaylistRead(url,method){
-    return method==='GET'&&/^\/api\/playlists\/[^/]+$/.test(url.pathname);
-  }
-  function activeFilters(){
-    return {
-      q:(document.getElementById('search')?.value||'').trim(),
-      group:document.getElementById('groupFilter')?.value||'',
-      status:document.getElementById('statusFilter')?.value||''
-    };
-  }
+  function isPlaylistRead(url,method){return method==='GET'&&/^\/api\/playlists\/[^/]+$/.test(url.pathname)}
   function token(){return localStorage.getItem('nexa_editor_token')||''}
-  async function jsonApi(url,opts={}){
-    const headers={'Content-Type':'application/json',...(opts.headers||{})};
-    const t=token();if(t)headers.Authorization=`Bearer ${t}`;
-    const r=await nativeFetch(url,{...opts,headers,cache:'no-store'});let d={};try{d=await r.json()}catch{}
-    if(!r.ok)throw new Error(d.error||`HTTP ${r.status}`);return d;
-  }
-  function toast(msg){const el=document.getElementById('toast');if(!el)return;el.textContent=msg;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),2300)}
   function esc(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
+  function searchValue(){return (document.getElementById('search')?.value||'').trim()}
+  function statusValue(){return document.getElementById('statusFilter')?.value||''}
   function triggerReload(){
     if(!state.playlistId)return;
     const btn=document.querySelector(`#playlistNav [data-playlist="${CSS.escape(String(state.playlistId))}"]`);
     if(btn)btn.click();
   }
   function syncGroupFilter(){
-    const sel=document.getElementById('groupFilter');
-    if(!sel||!state.groups.length)return;
-    const prev=sel.value;
-    sel.innerHTML='';
-    const all=document.createElement('option');all.value='';all.textContent='All groups';sel.appendChild(all);
-    for(const g of state.groups){const o=document.createElement('option');o.value=g.name;o.textContent=`${g.name} (${g.count})`;sel.appendChild(o)}
-    if(state.groups.some(g=>g.name===prev))sel.value=prev;
+    const sel=document.getElementById('groupFilter');if(!sel)return;
+    const current=state.openGroup;
+    sel.innerHTML='<option value="">All groups</option>';
+    for(const g of state.groups){const o=document.createElement('option');o.value=g.name;o.textContent=`${g.name} (${Number(g.count||0).toLocaleString()})`;sel.appendChild(o)}
+    if(current&&state.groups.some(g=>g.name===current))sel.value=current;
   }
-  function renderFullCategoryList(){
-    const list=document.getElementById('groupList');
-    if(!list||!state.groups.length)return;
-    list.innerHTML=state.groups.map(g=>`<div class="group-item"><button data-group-filter="${esc(g.name)}" title="Filter">${esc(g.name)}</button><span>${Number(g.count||0).toLocaleString()}</span><button data-group-rename="${esc(g.name)}" title="Rename">✎</button></div>`).join('');
-    list.querySelectorAll('[data-group-filter]').forEach(b=>b.addEventListener('click',()=>{
-      const sel=document.getElementById('groupFilter');if(!sel)return;sel.value=b.dataset.groupFilter;state.page=1;sel.dispatchEvent(new Event('change',{bubbles:true}));
-    }));
-    list.querySelectorAll('[data-group-rename]').forEach(b=>b.addEventListener('click',async()=>{
-      const from=b.dataset.groupRename;const to=prompt('New category name',from);if(!to||to.trim()===from)return;
-      try{await jsonApi(`/api/playlists/${encodeURIComponent(state.playlistId)}/groups/rename`,{method:'POST',body:JSON.stringify({from,to:to.trim()})});toast('Category renamed');triggerReload()}catch(e){toast(e.message)}
-    }));
+  function setEditorMode(){
+    const grid=document.querySelector('#editorView .editor-grid');if(!grid)return;
+    grid.classList.add('nexa-accordion-editor');
+    grid.classList.toggle('nexa-collapsed',!state.openGroup&&!state.searching);
+  }
+  function setHeading(){
+    const panel=document.querySelector('#editorView .channel-panel');if(!panel)return;
+    const eyebrow=panel.querySelector('.panel-head .eyebrow');
+    const h=panel.querySelector('.panel-head h3');
+    if(eyebrow)eyebrow.textContent='BASIC EDITOR';
+    if(!h)return;
+    if(state.searching){h.innerHTML=`<span id="visibleCount">${Number(state.pagination?.total||0).toLocaleString()}</span> search results`}
+    else if(state.openGroup){h.innerHTML=`<span id="visibleCount">${Number(state.pagination?.total||0).toLocaleString()}</span> channels`}
+    else h.innerHTML=`<span id="visibleCount">${state.groups.length.toLocaleString()}</span> categories`;
   }
   function renderPager(){
-    const p=state.pagination;
-    const panel=document.querySelector('#editorView .channel-panel');
-    if(!p||!panel)return;
+    const panel=document.querySelector('#editorView .channel-panel'),p=state.pagination;if(!panel||!p)return;
     let bar=document.getElementById('largePlaylistPager');
-    if(!bar){
-      bar=document.createElement('div');bar.id='largePlaylistPager';bar.style.cssText='display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid rgba(120,140,160,.16)';
-      const head=panel.querySelector('.panel-head');(head?.parentNode||panel).insertBefore(bar,head?.nextSibling||panel.firstChild);
+    if(!bar){bar=document.createElement('div');bar.id='largePlaylistPager';bar.className='nexa-accordion-pager';const head=panel.querySelector('.panel-head');(head?.parentNode||panel).insertBefore(bar,head?.nextSibling||panel.firstChild)}
+    const shouldShow=(state.openGroup||state.searching)&&p.pages>1;
+    if(!shouldShow){bar.style.display='none';return}
+    bar.style.display='flex';bar.innerHTML='';
+    const info=document.createElement('span');info.className='nexa-page-info';info.textContent=`${Number(p.total||0).toLocaleString()} channels · Page ${p.page}/${p.pages}`;
+    const prev=document.createElement('button');prev.className='ghost';prev.type='button';prev.textContent='← Prev';prev.disabled=p.page<=1;
+    const next=document.createElement('button');next.className='ghost';next.type='button';next.textContent='Next →';next.disabled=p.page>=p.pages;
+    const size=document.createElement('select');size.setAttribute('aria-label','Channels per page');
+    for(const n of [100,250,500]){const o=document.createElement('option');o.value=String(n);o.textContent=`${n} / page`;if(n===p.limit)o.selected=true;size.appendChild(o)}
+    prev.onclick=()=>{if(state.page>1){state.page--;triggerReload()}};
+    next.onclick=()=>{if(state.page<p.pages){state.page++;triggerReload()}};
+    size.onchange=()=>{state.limit=Number(size.value)||250;state.page=1;triggerReload()};
+    bar.append(info,prev,next,size);
+  }
+  function categoryRow(group){
+    const tr=document.createElement('tr');tr.className='nexa-category-row'+(state.openGroup===group.name?' open':'');tr.dataset.group=group.name;
+    const td=document.createElement('td');td.colSpan=7;
+    const b=document.createElement('button');b.type='button';b.className='nexa-category-toggle';b.setAttribute('aria-expanded',state.openGroup===group.name?'true':'false');
+    b.innerHTML=`<span class="nexa-category-arrow">›</span><span class="nexa-category-name">${esc(group.name)}</span><span class="nexa-category-count">${Number(group.count||0).toLocaleString()}</span>`;
+    b.onclick=()=>{state.openGroup=state.openGroup===group.name?'':group.name;state.page=1;const search=document.getElementById('search');if(search&&search.value)search.value='';state.searching=false;syncGroupFilter();triggerReload()};
+    td.appendChild(b);tr.appendChild(td);return tr;
+  }
+  function renderAccordion(){
+    if(document.getElementById('editorView')?.classList.contains('hidden'))return;
+    setEditorMode();syncGroupFilter();setHeading();renderPager();
+    const meta=document.getElementById('playlistMeta');if(meta&&state.pagination)meta.textContent=`${Number(state.pagination.total_channels||0).toLocaleString()} channels · ${state.groups.length} categories`;
+    const empty=document.getElementById('emptyChannels');if(empty)empty.classList.add('hidden');
+    if(state.searching)return;
+    const body=document.getElementById('channelRows');if(!body)return;
+    const channelRows=[...body.querySelectorAll('tr[data-id]')];
+    body.innerHTML='';
+    for(const group of state.groups){
+      body.appendChild(categoryRow(group));
+      if(state.openGroup===group.name){
+        if(channelRows.length){for(const row of channelRows){row.classList.add('nexa-channel-child');body.appendChild(row)}}
+        else{const tr=document.createElement('tr');tr.className='nexa-category-empty';tr.innerHTML='<td colspan="7">No channels match the current filter in this category.</td>';body.appendChild(tr)}
+      }
     }
-    if(!p.paged||p.total_channels<=2000){bar.style.display='none'}else{
-      bar.style.display='flex';
-      bar.innerHTML='';
-      const info=document.createElement('span');info.style.cssText='font-weight:700;flex:1;min-width:180px';
-      info.textContent=`${p.total.toLocaleString()} matched · ${p.total_channels.toLocaleString()} total · Page ${p.page}/${p.pages}`;
-      const prev=document.createElement('button');prev.className='ghost';prev.textContent='← Prev';prev.disabled=p.page<=1;
-      const next=document.createElement('button');next.className='ghost';next.textContent='Next →';next.disabled=p.page>=p.pages;
-      const size=document.createElement('select');size.setAttribute('aria-label','Channels per page');
-      for(const n of [100,250,500]){const o=document.createElement('option');o.value=String(n);o.textContent=`${n} / page`;if(n===p.limit)o.selected=true;size.appendChild(o)}
-      prev.addEventListener('click',()=>{if(state.page>1){state.page--;triggerReload()}});
-      next.addEventListener('click',()=>{if(state.page<p.pages){state.page++;triggerReload()}});
-      size.addEventListener('change',()=>{state.limit=Number(size.value)||250;state.page=1;triggerReload()});
-      bar.append(info,prev,next,size);
-    }
-    const meta=document.getElementById('playlistMeta');
-    if(meta)meta.textContent=`${p.total_channels.toLocaleString()} channels · ${state.groups.length} groups`;
-    syncGroupFilter();
-    renderFullCategoryList();
   }
 
   window.fetch=async function(input,opts={}){
-    let url;
-    try{url=new URL(typeof input==='string'?input:input.url,location.origin)}catch{return nativeFetch(input,opts)}
+    let url;try{url=new URL(typeof input==='string'?input:input.url,location.origin)}catch{return nativeFetch(input,opts)}
     const method=String(opts.method||(typeof input!=='string'&&input.method)||'GET').toUpperCase();
-    if(isPlaylistRead(url,method)){
-      const id=url.pathname.split('/').pop();
-      const changed=state.playlistId!==id;
-      if(changed){state.playlistId=id;state.page=1}
-      const f=changed?{q:'',group:'',status:''}:activeFilters();
-      url.searchParams.set('paged','1');
-      url.searchParams.set('page',String(state.page));
-      url.searchParams.set('limit',String(state.limit));
-      if(f.q)url.searchParams.set('q',f.q);else url.searchParams.delete('q');
-      if(f.group)url.searchParams.set('group',f.group);else url.searchParams.delete('group');
-      if(f.status)url.searchParams.set('status',f.status);else url.searchParams.delete('status');
-      const response=await nativeFetch(url.pathname+url.search,opts);
-      try{
-        const data=await response.clone().json();
-        if(data?.pagination){state.pagination=data.pagination;state.page=data.pagination.page;state.groups=Array.isArray(data.groups)?data.groups:[];window.__nexaFullGroups=state.groups;setTimeout(renderPager,0);setTimeout(renderPager,120)}
-      }catch{}
-      return response;
-    }
-    return nativeFetch(input,opts);
+    if(!isPlaylistRead(url,method))return nativeFetch(input,opts);
+
+    const id=url.pathname.split('/').pop(),changed=state.playlistId!==id;
+    if(changed){state.playlistId=id;state.page=1;state.openGroup='';state.searching=false}
+    const q=changed?'':searchValue(),status=changed?'':statusValue();
+    state.searching=!!q;
+    url.searchParams.set('paged','1');url.searchParams.set('page',String(state.page));url.searchParams.set('limit',String(state.limit));
+    if(q){url.searchParams.set('q',q);url.searchParams.delete('group')}
+    else{url.searchParams.delete('q');url.searchParams.set('group',state.openGroup||'__nexa_collapsed__')}
+    if(status)url.searchParams.set('status',status);else url.searchParams.delete('status');
+
+    const response=await nativeFetch(url.pathname+url.search,opts);
+    try{
+      const data=await response.clone().json();
+      if(data?.pagination){state.pagination=data.pagination;state.page=data.pagination.page;state.groups=Array.isArray(data.groups)?data.groups:[];window.__nexaFullGroups=state.groups;setTimeout(renderAccordion,0);setTimeout(renderAccordion,100)}
+    }catch{}
+    return response;
   };
 
-  function scheduleFilterReload(){
-    if(!state.pagination?.paged||state.pagination.total_channels<=2000)return;
-    clearTimeout(state.timer);state.timer=setTimeout(()=>{state.page=1;triggerReload()},300);
+  function scheduleReload(){
+    if(!state.playlistId)return;
+    clearTimeout(state.timer);state.timer=setTimeout(()=>{state.page=1;triggerReload()},280);
   }
   document.addEventListener('DOMContentLoaded',()=>{
-    document.getElementById('search')?.addEventListener('input',scheduleFilterReload,true);
-    document.getElementById('groupFilter')?.addEventListener('change',scheduleFilterReload,true);
-    document.getElementById('statusFilter')?.addEventListener('change',scheduleFilterReload,true);
-    new MutationObserver(()=>{if(state.pagination)setTimeout(renderPager,0)}).observe(document.body,{childList:true,subtree:true});
+    document.getElementById('search')?.addEventListener('input',scheduleReload,true);
+    document.getElementById('statusFilter')?.addEventListener('change',scheduleReload,true);
+    new MutationObserver(()=>{if(state.pagination)setTimeout(renderAccordion,0)}).observe(document.body,{childList:true,subtree:true});
   });
 })();
