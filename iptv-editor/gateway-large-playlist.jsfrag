@@ -1,0 +1,39 @@
+// Large-playlist safe reader. Prevents tens of thousands of channels from being sent/rendered at once.
+app.get('/api/playlists/:id',(req,res)=>{
+  const a=requireAuth(req,res);if(!a)return;
+  const s=a.store;
+  const p=s.playlists.find(x=>String(x.id)===String(req.params.id)&&String(x.user_id)===String(a.user.id));
+  if(!p)return res.status(404).json({error:'Playlist not found'});
+
+  const all=s.channels.filter(c=>String(c.playlist_id)===String(p.id)).sort((x,y)=>(Number(x.sort_order)||0)-(Number(y.sort_order)||0)||(Number(x.id)||0)-(Number(y.id)||0));
+  const totalChannels=all.length;
+  const groupCounts={};
+  for(const c of all){const g=c.group_title||'Other';groupCounts[g]=(groupCounts[g]||0)+1}
+  const orderedGroups=[];
+  for(const g of Array.isArray(p.category_order)?p.category_order:[])if(groupCounts[g]&&!orderedGroups.includes(g))orderedGroups.push(g);
+  for(const g of Object.keys(groupCounts).sort((x,y)=>x.localeCompare(y)))if(!orderedGroups.includes(g))orderedGroups.push(g);
+
+  const q=clean(req.query.q,500).toLowerCase();
+  const group=clean(req.query.group,500);
+  const status=clean(req.query.status,30);
+  let filtered=all;
+  if(q)filtered=filtered.filter(c=>`${c.name||''} ${c.group_title||''} ${c.tvg_id||''} ${c.tvg_name||''}`.toLowerCase().includes(q));
+  if(group)filtered=filtered.filter(c=>(c.group_title||'Other')===group);
+  if(status==='enabled')filtered=filtered.filter(c=>c.enabled!==false);
+  if(status==='disabled')filtered=filtered.filter(c=>c.enabled===false);
+
+  const requestedPaged=req.query.paged==='1'||totalChannels>2000||q||group||status;
+  const limit=requestedPaged?Math.min(500,Math.max(50,Number(req.query.limit)||250)):Math.max(1,filtered.length||1);
+  const pages=Math.max(1,Math.ceil(filtered.length/limit));
+  const page=Math.min(pages,Math.max(1,Number(req.query.page)||1));
+  const start=(page-1)*limit;
+  const channels=requestedPaged?filtered.slice(start,start+limit):filtered;
+
+  res.set('Cache-Control','no-store');
+  res.json({
+    playlist:{...p,channel_count:totalChannels,group_count:orderedGroups.length,category_order:orderedGroups},
+    channels,
+    pagination:{page,limit,pages,total:filtered.length,total_channels:totalChannels,paged:requestedPaged},
+    groups:orderedGroups.map(name=>({name,count:groupCounts[name]||0}))
+  });
+});
