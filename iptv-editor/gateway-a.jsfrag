@@ -8,7 +8,6 @@ import fs from 'fs';
 import path from 'path';
 import http from 'http';
 import https from 'https';
-import { spawn } from 'child_process';
 import { createInterface } from 'readline';
 import { fileURLToPath } from 'url';
 import { initStorage, readStoreSync, writeStoreSync, syncRemoteFromDisk, closeStorage } from './storage.js';
@@ -22,31 +21,26 @@ const MAX=25*1024*1024;
 
 await initStorage();
 
-let child;
 function readStore(){return readStoreSync()}
-function writeStore(store){writeStoreSync(store)}
-function normalizeStore(){const s=readStore();s.users=Array.isArray(s.users)?s.users:[];s.playlists=Array.isArray(s.playlists)?s.playlists:[];s.channels=Array.isArray(s.channels)?s.channels:[];s.seq=s.seq||{};const maxima={user:Math.max(0,...s.users.map(x=>+x.id||0)),playlist:Math.max(0,...s.playlists.map(x=>+x.id||0)),channel:Math.max(0,...s.channels.map(x=>+x.id||0))};for(const k of Object.keys(maxima))if(!s.seq[k]||s.seq[k]<=maxima[k])s.seq[k]=maxima[k]+1;s.users.forEach(u=>{if(!u.role)u.role='user';if(typeof u.disabled!=='boolean')u.disabled=false});if(s.users.length&&!s.users.some(u=>u.role==='admin'))[...s.users].sort((a,b)=>(+a.id)-(+b.id))[0].role='admin';writeStore(s)}
-function restartChild(){
-  if(child&&child.exitCode===null&&!child.killed)return;
-  child=spawn(process.execPath,['server.js'],{cwd:__dirname,env:{...process.env,PORT:String(CHILD_PORT)},stdio:'inherit'});
-  child.on('exit',(code,signal)=>{
-    child=null;
-    if(signal==='SIGTERM')return;
-    console.error('Editor child exited',code,signal);
-    setTimeout(restartChild,1200);
-  });
+function writeStore(store){return writeStoreSync(store)}
+function normalizeStore(){
+  const s=readStore();
+  let changed=false;
+  if(!Array.isArray(s.users)){s.users=[];changed=true}
+  if(!Array.isArray(s.playlists)){s.playlists=[];changed=true}
+  if(!Array.isArray(s.channels)){s.channels=[];changed=true}
+  if(!s.seq||typeof s.seq!=='object'){s.seq={};changed=true}
+  let maxUser=0,maxPlaylist=0,maxChannel=0;
+  for(const u of s.users){maxUser=Math.max(maxUser,+u.id||0);if(!u.role){u.role='user';changed=true}if(typeof u.disabled!=='boolean'){u.disabled=false;changed=true}}
+  for(const p of s.playlists)maxPlaylist=Math.max(maxPlaylist,+p.id||0);
+  for(const c of s.channels)maxChannel=Math.max(maxChannel,+c.id||0);
+  const maxima={user:maxUser,playlist:maxPlaylist,channel:maxChannel};
+  for(const k of Object.keys(maxima)){if(!s.seq[k]||s.seq[k]<=maxima[k]){s.seq[k]=maxima[k]+1;changed=true}}
+  if(s.users.length&&!s.users.some(u=>u.role==='admin')){s.users.slice().sort((a,b)=>(+a.id)-(+b.id))[0].role='admin';changed=true}
+  if(changed)writeStore(s);
 }
-async function stopChildForHeavyWork(){
-  const c=child;
-  if(!c||c.exitCode!==null)return;
-  await new Promise(resolve=>{
-    let done=false;
-    const finish=()=>{if(done)return;done=true;clearTimeout(timer);resolve()};
-    const timer=setTimeout(finish,2500);
-    c.once('exit',finish);
-    try{c.kill('SIGTERM')}catch{finish()}
-  });
-  if(child===c)child=null;
-}
-normalizeStore();restartChild();
-process.on('SIGTERM',async()=>{if(child&&child.exitCode===null&&!child.killed)child.kill('SIGTERM');await syncRemoteFromDisk().catch(()=>{});await closeStorage();process.exit(0)});
+// Legacy calls remain in older route fragments. In single-process mode they are intentional no-ops.
+function restartChild(){}
+async function stopChildForHeavyWork(){global.gc?.()}
+normalizeStore();
+process.on('SIGTERM',async()=>{await syncRemoteFromDisk().catch(()=>{});await closeStorage();process.exit(0)});
