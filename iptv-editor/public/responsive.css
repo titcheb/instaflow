@@ -1,0 +1,152 @@
+/* NEXA responsive layer */
+html,body{max-width:100%;overflow-x:hidden}.main,.content,.panel,.glass,.editor-grid,.channel-panel,.groups-panel{min-width:0;max-width:100%}
+
+@media(max-width:800px){
+  html,body{width:100%;overflow-x:hidden!important}
+  .app-view,body.nexa-sidebar-collapsed .app-view{display:block!important;min-height:100vh}
+
+  /* Mobile sidebar: compact icon rail by default, full drawer when opened */
+  .sidebar,body.nexa-sidebar-collapsed .sidebar{
+    position:fixed!important;left:8px!important;top:8px!important;bottom:8px!important;
+    width:58px!important;padding:10px 6px!important;transform:none!important;
+    border-radius:18px!important;z-index:1000!important;overflow:hidden!important;
+    transition:width .2s ease,padding .2s ease,box-shadow .2s ease!important;
+  }
+  .sidebar .side-top,body.nexa-sidebar-collapsed .side-top{justify-content:center!important;flex-direction:column!important;gap:8px!important}
+  .sidebar .brand-lockup.compact>div,
+  .sidebar .nexa-menu-label,.sidebar .nexa-chevron,.sidebar .nexa-soon,
+  .sidebar .nexa-section-title,.sidebar .playlist-nav,.sidebar .nexa-theme-row span,
+  .sidebar .nexa-theme-row i,.sidebar .nexa-version,.sidebar .user-email,.sidebar .user-role,
+  .sidebar #newPlaylistBtn,.sidebar .nexa-submenu,.sidebar #logoutBtn .nexa-menu-label{
+    display:none!important
+  }
+  .sidebar .brand-mark{width:34px!important;height:34px!important;font-size:16px!important}
+  .sidebar .nexa-side-actions{margin:0!important;display:block!important}
+  .sidebar .nexa-collapse-btn{display:none!important}
+  .sidebar .nexa-menu-item,.sidebar .nav-btn,
+  body.nexa-sidebar-collapsed .nexa-menu-item,body.nexa-sidebar-collapsed .nav-btn{
+    justify-content:center!important;padding:10px 6px!important;gap:0!important;min-height:42px!important
+  }
+  .sidebar .nexa-menu-icon{width:28px!important;flex:0 0 28px!important;font-size:15px!important}
+  .sidebar .nexa-playlists-section{display:none!important}
+  .sidebar .sidebar-bottom{justify-items:center!important}
+  .sidebar #logoutBtn{width:42px!important;height:42px!important;padding:0!important;display:grid!important;place-items:center!important}
+  .sidebar .nexa-theme-row{width:42px!important;height:30px!important;padding:0!important;justify-content:center!important}
+  .sidebar .nexa-theme-row:after{content:'◐';font-size:16px;color:#7d94a4}
+
+  .sidebar.open,body.nexa-sidebar-collapsed .sidebar.open{
+    width:min(286px,88vw)!important;padding:14px 12px!important;overflow-y:auto!important;
+    box-shadow:0 20px 60px #0008!important
+  }
+  .sidebar.open .side-top{justify-content:space-between!important;flex-direction:row!important}
+  .sidebar.open .brand-lockup.compact>div,.sidebar.open .nexa-menu-label,
+  .sidebar.open .nexa-chevron,.sidebar.open .nexa-soon,.sidebar.open .nexa-section-title,
+  .sidebar.open .playlist-nav,.sidebar.open .nexa-theme-row span,.sidebar.open .nexa-theme-row i,
+  .sidebar.open .nexa-version,.sidebar.open .user-email,.sidebar.open .user-role,
+  .sidebar.open #newPlaylistBtn{display:initial!important}
+  .sidebar.open .nexa-submenu{padding-left:24px!important}
+  .sidebar.open .nexa-menu-group.open .nexa-submenu{display:grid!important}
+  .sidebar.open .nexa-playlists-section{display:block!important}
+  .sidebar.open .nexa-side-actions{display:flex!important;margin-left:auto!important}
+  .sidebar.open .nexa-menu-item,.sidebar.open .nav-btn{
+    justify-content:flex-start!important;padding:11px 12px!important;gap:10px!important
+  }
+  .sidebar.open .sidebar-bottom{justify-items:stretch!important}
+  .sidebar.open #logoutBtn{width:100%!important;height:auto!important;display:flex!important}
+  .sidebar.open .nexa-theme-row{width:auto!important;height:auto!important;padding:4px 8px!important;justify-content:space-between!important}
+  .sidebar.open .nexa-theme-row:after{display:none!important}
+
+  /* Main canvas always stays inside phone viewport */
+  .main,body.nexa-sidebar-collapsed .main{
+    display:block!important;width:100%!important;max-width:100%!important;grid-column:auto!important;
+    padding:12px 10px 36px 76px!important;margin:0!important;overflow:hidden!important
+  }
+  .topbar{gap:10px!important;padding:4px 0 14px!important;align-items:center!important}
+  .topbar>div:nth-child(2){min-width:0;flex:1}
+  .topbar h2{font-size:22px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .topbar .eyebrow{font-size:9px!important}
+  #mobileMenu{display:grid!important;flex:0 0 40px}
+  .top-actions{display:none!important}
+
+  .content{gap:12px!important;width:100%!important}
+  .hero-card,.playlist-header,.admin-hero{padding:18px!important;border-radius:16px!important}
+  .hero-card h3,.playlist-header h3,.admin-hero h3{font-size:22px!important}
+  .playlist-header,.admin-hero{flex-direction:column!important;align-items:stretch!important;gap:14px!important}
+  .header-actions{display:grid!important;grid-template-columns:1fr 1fr!important;width:100%!important;gap:8px!important}
+  .header-actions>*{width:100%!important;min-width:0!important}
+  .header-actions .icon-btn{width:42px!important;justify-self:end!important}
+
+  .stats-grid{grid-template-columns:1fr 1fr!important;gap:10px!important}
+  .stat{padding:14px!important;border-radius:14px!important}
+  .stat strong{font-size:26px!important}
+  .dashboard-playlists{grid-template-columns:1fr!important}
+  .panel{padding:14px!important;border-radius:16px!important}
+  .panel-head{gap:10px!important;flex-wrap:wrap!important}
+
+  .toolbar{grid-template-columns:1fr 1fr!important;gap:7px!important;padding:9px!important}
+  .toolbar .search{grid-column:1/-1!important}
+  .toolbar input,.toolbar select,.toolbar button{min-width:0!important;width:100%!important;font-size:12px!important}
+
+  .editor-grid{display:block!important;width:100%!important}
+  .channel-panel,.groups-panel{width:100%!important;padding:12px!important;margin:0 0 12px!important}
+  .table-wrap{width:100%!important;max-width:100%!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch}
+  .channel-panel table{min-width:700px!important}
+
+  /* Category editor remains its own full page and fits mobile */
+  body.nexa-category-mode .groups-panel{padding:0!important}
+  body.nexa-category-mode #groupList .group-item{
+    grid-template-columns:28px minmax(0,1fr) 62px 48px!important;padding:10px 8px!important;min-width:0!important
+  }
+  body.nexa-category-mode .nexa-category-table-head{
+    grid-template-columns:28px minmax(0,1fr) 62px 48px!important;padding:9px 8px!important;font-size:8px!important
+  }
+  body.nexa-category-mode #groupList .group-item>button[data-group-filter]{font-size:11px!important;white-space:normal!important;line-height:1.25!important}
+
+  /* User management: convert wide desktop table into mobile cards */
+  #adminView{width:100%!important;max-width:100%!important}
+  #adminView .stats-grid{grid-template-columns:1fr 1fr!important}
+  .admin-panel-head{align-items:stretch!important;flex-direction:column!important}
+  .admin-search{width:100%!important;max-width:none!important}
+  #adminView .table-wrap{overflow:visible!important;border:0!important}
+  .admin-table{display:block!important;width:100%!important;min-width:0!important}
+  .admin-table thead{display:none!important}
+  .admin-table tbody{display:grid!important;gap:10px!important;width:100%!important}
+  .admin-table tr{display:block!important;width:100%!important;padding:12px!important;border:1px solid var(--line)!important;border-radius:14px!important;background:var(--panel2)!important}
+  .admin-table td{display:grid!important;grid-template-columns:82px minmax(0,1fr)!important;align-items:center!important;gap:10px!important;width:100%!important;padding:8px 2px!important;border:0!important;font-size:12px!important;overflow-wrap:anywhere!important}
+  .admin-table td::before{color:var(--muted);font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+  .admin-table td:nth-child(1)::before{content:'User'}
+  .admin-table td:nth-child(2)::before{content:'Role'}
+  .admin-table td:nth-child(3)::before{content:'Playlists'}
+  .admin-table td:nth-child(4)::before{content:'Channels'}
+  .admin-table td:nth-child(5)::before{content:'Created'}
+  .admin-table td:nth-child(6)::before{content:'Status'}
+  .admin-table td:nth-child(7){display:block!important;padding-top:10px!important}
+  .admin-table td:nth-child(7)::before{content:'Actions';display:block;margin-bottom:8px}
+  .admin-user{min-width:0!important;width:100%!important}
+  .admin-user b{white-space:normal!important;overflow-wrap:anywhere!important}
+  .admin-actions{min-width:0!important;width:100%!important;display:grid!important;grid-template-columns:1fr 1fr!important;gap:7px!important}
+  .admin-actions .tiny{width:100%!important;min-height:38px!important;white-space:normal!important}
+
+  /* dialogs/forms */
+  dialog.modal,.modal,.modal.wide,.modal.small,.import-preview-modal{width:calc(100vw - 18px)!important;max-width:calc(100vw - 18px)!important;max-height:92vh!important;margin:auto!important;border-radius:16px!important}
+  .form-grid,.xtream-grid{grid-template-columns:1fr!important}
+  .span2{grid-column:auto!important}
+  .modal-actions{flex-wrap:wrap!important}
+  .modal-actions.split{grid-template-columns:1fr 1fr!important}
+  .preview-summary{grid-template-columns:1fr 1fr!important}
+  .preview-tools{grid-template-columns:1fr 1fr!important}
+  .preview-tools input{grid-column:1/-1!important}
+
+  button,.primary,.ghost,.tiny,.icon-btn{touch-action:manipulation}
+}
+
+@media(max-width:480px){
+  .main,body.nexa-sidebar-collapsed .main{padding-left:72px!important;padding-right:8px!important}
+  .stats-grid,#adminView .stats-grid{grid-template-columns:1fr!important}
+  .header-actions{grid-template-columns:1fr!important}
+  .toolbar{grid-template-columns:1fr!important}
+  .toolbar .search{grid-column:auto!important}
+  .admin-actions{grid-template-columns:1fr!important}
+  .preview-summary{grid-template-columns:1fr!important}
+  .modal-actions.split{grid-template-columns:1fr!important}
+}
