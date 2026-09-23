@@ -1,16 +1,26 @@
 (()=>{
   const nativeFetch=window.fetch.bind(window);
-  const state={playlistId:null,page:1,limit:250,pagination:null,groups:[],openGroup:'',timer:null,searching:false};
+  const state={playlistId:null,page:1,limit:250,pagination:null,groups:[],openGroup:'',loadingGroup:'',timer:null,searching:false};
 
   function isPlaylistRead(url,method){return method==='GET'&&/^\/api\/playlists\/[^/]+$/.test(url.pathname)}
   function token(){return localStorage.getItem('nexa_editor_token')||''}
   function esc(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
   function searchValue(){return (document.getElementById('search')?.value||'').trim()}
   function statusValue(){return document.getElementById('statusFilter')?.value||''}
+  function toast(msg){const el=document.getElementById('toast');if(!el)return;el.textContent=msg;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),2300)}
+
+  function findPlaylistTrigger(){
+    if(!state.playlistId)return null;
+    const id=String(state.playlistId);
+    const nav=[...document.querySelectorAll('#playlistNav [data-playlist]')].find(x=>String(x.dataset.playlist)===id);
+    if(nav)return nav;
+    return [...document.querySelectorAll('#dashboardPlaylists [data-id]')].find(x=>String(x.dataset.id)===id)||null;
+  }
   function triggerReload(){
-    if(!state.playlistId)return;
-    const btn=document.querySelector(`#playlistNav [data-playlist="${CSS.escape(String(state.playlistId))}"]`);
-    if(btn)btn.click();
+    const btn=findPlaylistTrigger();
+    if(!btn){toast('Could not reload this playlist. Open it again from Playlist manager.');return false}
+    btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));
+    return true;
   }
   function syncGroupFilter(){
     const sel=document.getElementById('groupFilter');if(!sel)return;
@@ -54,11 +64,11 @@
   function categoryRow(group){
     const tr=document.createElement('tr');tr.className='nexa-category-row'+(state.openGroup===group.name?' open':'');tr.dataset.group=group.name;
     const td=document.createElement('td');td.colSpan=7;
-    const b=document.createElement('button');b.type='button';b.className='nexa-category-toggle';b.setAttribute('aria-expanded',state.openGroup===group.name?'true':'false');
+    const b=document.createElement('button');b.type='button';b.className='nexa-category-toggle';b.dataset.group=group.name;b.setAttribute('aria-expanded',state.openGroup===group.name?'true':'false');
     b.innerHTML=`<span class="nexa-category-arrow">›</span><span class="nexa-category-name">${esc(group.name)}</span><span class="nexa-category-count">${Number(group.count||0).toLocaleString()}</span>`;
-    b.onclick=()=>{state.openGroup=state.openGroup===group.name?'':group.name;state.page=1;const search=document.getElementById('search');if(search&&search.value)search.value='';state.searching=false;syncGroupFilter();triggerReload()};
     td.appendChild(b);tr.appendChild(td);return tr;
   }
+  function loadingRow(){const tr=document.createElement('tr');tr.className='nexa-category-empty nexa-category-loading';tr.innerHTML='<td colspan="7">Loading channels…</td>';return tr}
   function renderAccordion(){
     if(document.getElementById('editorView')?.classList.contains('hidden'))return;
     setEditorMode();syncGroupFilter();setHeading();renderPager();
@@ -71,10 +81,24 @@
     for(const group of state.groups){
       body.appendChild(categoryRow(group));
       if(state.openGroup===group.name){
-        if(channelRows.length){for(const row of channelRows){row.classList.add('nexa-channel-child');body.appendChild(row)}}
+        if(state.loadingGroup===group.name&&!channelRows.length){body.appendChild(loadingRow())}
+        else if(channelRows.length){for(const row of channelRows){row.classList.add('nexa-channel-child');body.appendChild(row)}}
         else{const tr=document.createElement('tr');tr.className='nexa-category-empty';tr.innerHTML='<td colspan="7">No channels match the current filter in this category.</td>';body.appendChild(tr)}
       }
     }
+  }
+
+  function toggleGroup(name){
+    if(!name)return;
+    const closing=state.openGroup===name;
+    state.openGroup=closing?'':name;
+    state.loadingGroup=closing?'':name;
+    state.page=1;
+    const search=document.getElementById('search');if(search&&search.value)search.value='';
+    state.searching=false;
+    syncGroupFilter();
+    renderAccordion();
+    if(!triggerReload())state.loadingGroup='';
   }
 
   window.fetch=async function(input,opts={}){
@@ -83,7 +107,7 @@
     if(!isPlaylistRead(url,method))return nativeFetch(input,opts);
 
     const id=url.pathname.split('/').pop(),changed=state.playlistId!==id;
-    if(changed){state.playlistId=id;state.page=1;state.openGroup='';state.searching=false}
+    if(changed){state.playlistId=id;state.page=1;state.openGroup='';state.loadingGroup='';state.searching=false}
     const q=changed?'':searchValue(),status=changed?'':statusValue();
     state.searching=!!q;
     url.searchParams.set('paged','1');url.searchParams.set('page',String(state.page));url.searchParams.set('limit',String(state.limit));
@@ -94,8 +118,12 @@
     const response=await nativeFetch(url.pathname+url.search,opts);
     try{
       const data=await response.clone().json();
-      if(data?.pagination){state.pagination=data.pagination;state.page=data.pagination.page;state.groups=Array.isArray(data.groups)?data.groups:[];window.__nexaFullGroups=state.groups;setTimeout(renderAccordion,0);setTimeout(renderAccordion,100)}
-    }catch{}
+      if(data?.pagination){
+        state.pagination=data.pagination;state.page=data.pagination.page;state.groups=Array.isArray(data.groups)?data.groups:[];window.__nexaFullGroups=state.groups;
+        if(state.openGroup)state.loadingGroup='';
+        setTimeout(renderAccordion,0);setTimeout(renderAccordion,120);
+      }
+    }catch{state.loadingGroup=''}
     return response;
   };
 
@@ -103,9 +131,14 @@
     if(!state.playlistId)return;
     clearTimeout(state.timer);state.timer=setTimeout(()=>{state.page=1;triggerReload()},280);
   }
+  document.addEventListener('click',e=>{
+    const b=e.target.closest?.('.nexa-category-toggle');if(!b)return;
+    e.preventDefault();e.stopPropagation();toggleGroup(b.dataset.group||b.closest('.nexa-category-row')?.dataset.group||'');
+  },true);
   document.addEventListener('DOMContentLoaded',()=>{
     document.getElementById('search')?.addEventListener('input',scheduleReload,true);
     document.getElementById('statusFilter')?.addEventListener('change',scheduleReload,true);
     new MutationObserver(()=>{if(state.pagination)setTimeout(renderAccordion,0)}).observe(document.body,{childList:true,subtree:true});
   });
+  window.NexaAccordion={toggleGroup,render:renderAccordion,state};
 })();
