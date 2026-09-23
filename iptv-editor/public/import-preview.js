@@ -5,12 +5,25 @@
   async function api(url,opts={}){const headers={'Content-Type':'application/json',...(opts.headers||{})};const t=token();if(t)headers.Authorization=`Bearer ${t}`;const r=await fetch(url,{...opts,headers});let d={};try{d=await r.json()}catch{}if(!r.ok)throw new Error(d.error||`HTTP ${r.status}`);return d}
   function toast(msg){const el=$('toast');if(!el)return;el.textContent=msg;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),2600)}
   function mode(){return document.querySelector('#importMethodTabs [data-import-method].active')?.dataset.importMethod||'m3u'}
+  function closeImport(){
+    const dialog=$('importDialog');
+    if(dialog?.open)dialog.close();
+    if($('importError'))$('importError').textContent='';
+  }
   function inject(){
     if(!$('categoryPreviewDialog'))document.body.insertAdjacentHTML('beforeend',`<dialog id="categoryPreviewDialog" class="modal glass import-preview-modal"><div class="modal-head"><div><p class="eyebrow">IMPORT PREVIEW</p><h3>Choose categories</h3></div><button id="previewClose" type="button" class="icon-btn">×</button></div><div class="preview-summary"><div><strong id="previewCategoryCount">0</strong><span>categories selected</span></div><div><strong id="previewChannelCount">0</strong><span>channels selected</span></div></div><div class="preview-tools"><input id="previewSearch" placeholder="Search categories…"><button id="previewAll" type="button" class="ghost">Select all</button><button id="previewNone" type="button" class="ghost">Clear</button></div><div id="previewCategoryList" class="preview-category-list"></div><div id="previewError" class="error-text"></div><div class="modal-actions preview-actions"><button id="previewBack" type="button" class="ghost">← Back</button><span></span><button id="previewCommit" type="button" class="primary">Import selected</button></div></dialog>`);
     bind();
   }
   function bind(){
-    const form=$('importForm');if(form&&!form.dataset.previewBound){form.dataset.previewBound='1';form.addEventListener('submit',startPreview,true)}
+    const form=$('importForm');
+    if(form&&!form.dataset.previewBound){
+      form.dataset.previewBound='1';
+      form.querySelectorAll('button[value="cancel"]').forEach(btn=>{
+        btn.type='button';
+        btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();closeImport()});
+      });
+      form.addEventListener('submit',startPreview,true);
+    }
     $('previewSearch')?.addEventListener('input',renderCategories);
     $('previewAll')?.addEventListener('click',()=>setVisible(true));
     $('previewNone')?.addEventListener('click',()=>setVisible(false));
@@ -20,6 +33,7 @@
     $('previewCategoryList')?.addEventListener('change',updateSummary);
   }
   async function startPreview(e){
+    if(e.submitter?.value==='cancel'){e.preventDefault();e.stopImmediatePropagation();closeImport();return}
     e.preventDefault();e.stopImmediatePropagation();
     const err=$('importError'),submit=$('importSubmit');if(err)err.textContent='';if(submit)submit.disabled=true;
     try{
