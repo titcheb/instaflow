@@ -1,4 +1,11 @@
 (()=>{
+  if(!document.querySelector('script[data-nexa-large-playlist]')){
+    const s=document.createElement('script');
+    s.src='/large-playlist-ui.js?v=1.5.2';
+    s.dataset.nexaLargePlaylist='1';
+    document.head.appendChild(s);
+  }
+
   function wire(dialogId){
     const dialog=document.getElementById(dialogId);
     if(!dialog||dialog.dataset.nexaCloseFixed==='1')return;
