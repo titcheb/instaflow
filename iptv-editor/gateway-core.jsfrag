@@ -1,0 +1,43 @@
+// Core editor APIs run in the gateway process so large stores are not loaded twice.
+function coreNow(){return new Date().toISOString()}
+function coreOwnPlaylist(s,id,uid){return s.playlists.find(p=>String(p.id)===String(id)&&String(p.user_id)===String(uid))}
+function coreValidHttp(v){try{return ['http:','https:'].includes(new URL(v).protocol)}catch{return false}}
+function coreParseAttrs(line){const out={};const re=/([\w-]+)="([^"]*)"/g;let m;while((m=re.exec(line)))out[m[1].toLowerCase()]=m[2];return out}
+function coreParseM3u(text){
+  const lines=String(text||'').replace(/^\uFEFF/,'').split(/\r?\n/),channels=[];let meta=null,ua='',ref='';
+  for(const raw of lines){const line=raw.trim();if(!line)continue;
+    if(line.startsWith('#EXTINF')){const attrs=coreParseAttrs(line),comma=line.indexOf(',');meta={attrs,name:comma>=0?line.slice(comma+1).trim():attrs['tvg-name']||'Unnamed channel'};ua='';ref=''}
+    else if(/^#EXTVLCOPT:http-user-agent=/i.test(line))ua=line.split('=').slice(1).join('=').trim();
+    else if(/^#EXTVLCOPT:http-referrer=/i.test(line)||/^#EXTVLCOPT:http-referer=/i.test(line))ref=line.split('=').slice(1).join('=').trim();
+    else if(meta&&!line.startsWith('#')){const a=meta.attrs,c={name:clean(meta.name,500),url:clean(line,5000),group_title:clean(a['group-title']||'Other',500),tvg_id:clean(a['tvg-id'],500),tvg_name:clean(a['tvg-name'],500),logo:clean(a['tvg-logo'],5000),user_agent:clean(ua,1000),referrer:clean(ref,5000),enabled:true};if(coreValidHttp(c.url))channels.push(c);meta=null}
+  }
+  return channels;
+}
+async function coreSafeRemote(url){const u=new URL(url);if(!['http:','https:'].includes(u.protocol))throw new Error('Only HTTP/HTTPS URLs are supported');if(u.hostname==='localhost'||u.hostname.endsWith('.local'))throw new Error('Local URLs are not allowed');const addrs=await dns.lookup(u.hostname,{all:true});for(const a of addrs){const ip=a.address;if(net.isIPv4(ip)){const p=ip.split('.').map(Number);if(p[0]===10||p[0]===127||p[0]===0||(p[0]===169&&p[1]===254)||(p[0]===172&&p[1]>=16&&p[1]<=31)||(p[0]===192&&p[1]===168)||(p[0]===100&&p[1]>=64&&p[1]<=127)||p[0]>=224)throw new Error('Private/local hosts are not allowed')}else{const x=ip.toLowerCase();if(x==='::1'||x==='::'||x.startsWith('fc')||x.startsWith('fd')||x.startsWith('fe80:'))throw new Error('Private/local hosts are not allowed')}}return u}
+async function coreFetchText(url){await coreSafeRemote(url);const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),25000);try{const r=await fetch(url,{signal:ctrl.signal,redirect:'follow',headers:{'User-Agent':'NEXA-IPTV-Editor/1.5','Accept':'application/x-mpegURL,text/plain,*/*'}});if(!r.ok)throw new Error(`Source returned HTTP ${r.status}`);const len=Number(r.headers.get('content-length')||0);if(len>MAX)throw new Error('Playlist is larger than 25 MB');const t=await r.text();if(Buffer.byteLength(t)>MAX)throw new Error('Playlist is larger than 25 MB');return t}finally{clearTimeout(timer)}}
+
+app.get('/api/playlists',(req,res)=>{
+  const a=requireAuth(req,res);if(!a)return;const s=a.store,ps=s.playlists.filter(p=>String(p.user_id)===String(a.user.id));
+  const ids=new Set(ps.map(p=>String(p.id))),stats=new Map();for(const p of ps)stats.set(String(p.id),{channels:0,enabled:0,groups:new Set()});
+  for(const c of s.channels){const id=String(c.playlist_id);if(!ids.has(id))continue;const x=stats.get(id);x.channels++;if(c.enabled!==false)x.enabled++;x.groups.add(c.group_title||'Other')}
+  res.json(ps.map(p=>{const x=stats.get(String(p.id));return{...p,channel_count:x.channels,enabled_count:x.enabled,group_count:x.groups.size}}).sort((x,y)=>String(y.updated_at||'').localeCompare(String(x.updated_at||''))));
+});
+
+app.post('/api/playlists',async(req,res)=>{
+  const a=requireAuth(req,res);if(!a)return;try{
+    const s=a.store,name=clean(req.body.name,200)||'My playlist',source=clean(req.body.sourceUrl,5000),epg=clean(req.body.epgUrl,5000);let text=String(req.body.m3uText||'');
+    if(!text&&source)text=await coreFetchText(source);if(!text)return res.status(400).json({error:'Paste M3U content or provide a source URL.'});
+    const parsed=coreParseM3u(text);text='';if(!parsed.length)return res.status(400).json({error:'No HTTP/HTTPS channels were found in this playlist.'});
+    const now=coreNow(),p={id:next(s,'playlist'),user_id:a.user.id,name,source_url:source,epg_url:epg,public_token:crypto.randomBytes(18).toString('hex'),created_at:now,updated_at:now};s.playlists.push(p);let order=0;
+    for(const c of parsed)s.channels.push({id:next(s,'channel'),playlist_id:p.id,...c,sort_order:order++,created_at:now,updated_at:now});
+    await writeStore(s);res.json({...p,channel_count:parsed.length});
+  }catch(e){res.status(502).json({error:e.name==='AbortError'?'Source request timed out.':(e.message||'Could not import playlist.')})}
+});
+
+app.patch('/api/playlists/:id',(req,res)=>{const a=requireAuth(req,res);if(!a)return;const s=a.store,p=coreOwnPlaylist(s,req.params.id,a.user.id);if(!p)return res.status(404).json({error:'Playlist not found'});if(clean(req.body.name,200))p.name=clean(req.body.name,200);p.epg_url=clean(req.body.epgUrl,5000);p.source_url=clean(req.body.sourceUrl,5000);p.updated_at=coreNow();writeStore(s);res.json(p)});
+app.delete('/api/playlists/:id',(req,res)=>{const a=requireAuth(req,res);if(!a)return;const s=a.store,p=coreOwnPlaylist(s,req.params.id,a.user.id);if(!p)return res.status(404).json({error:'Playlist not found'});s.playlists=s.playlists.filter(x=>x!==p);s.channels=s.channels.filter(c=>String(c.playlist_id)!==String(p.id));writeStore(s);global.gc?.();res.json({ok:true})});
+
+app.post('/api/playlists/:id/channels',(req,res)=>{const a=requireAuth(req,res);if(!a)return;const s=a.store,p=coreOwnPlaylist(s,req.params.id,a.user.id);if(!p)return res.status(404).json({error:'Playlist not found'});let max=-1;for(const x of s.channels)if(String(x.playlist_id)===String(p.id))max=Math.max(max,Number(x.sort_order)||0);const now=coreNow(),c={id:next(s,'channel'),playlist_id:p.id,name:clean(req.body.name,500)||'Unnamed channel',url:clean(req.body.url,5000),group_title:clean(req.body.groupTitle,500)||'Other',tvg_id:clean(req.body.tvgId,500),tvg_name:clean(req.body.tvgName,500),logo:clean(req.body.logo,5000),user_agent:clean(req.body.userAgent,1000),referrer:clean(req.body.referrer,5000),enabled:req.body.enabled!==false,sort_order:max+1,created_at:now,updated_at:now};if(!coreValidHttp(c.url))return res.status(400).json({error:'Use a valid HTTP/HTTPS stream URL.'});s.channels.push(c);p.updated_at=now;writeStore(s);res.json(c)});
+app.patch('/api/channels/:id',(req,res)=>{const a=requireAuth(req,res);if(!a)return;const s=a.store,c=s.channels.find(x=>String(x.id)===String(req.params.id)),p=c&&coreOwnPlaylist(s,c.playlist_id,a.user.id);if(!c||!p)return res.status(404).json({error:'Channel not found'});const url=clean(req.body.url,5000);if(!coreValidHttp(url))return res.status(400).json({error:'Use a valid HTTP/HTTPS stream URL.'});Object.assign(c,{name:clean(req.body.name,500)||'Unnamed channel',url,group_title:clean(req.body.groupTitle,500)||'Other',tvg_id:clean(req.body.tvgId,500),tvg_name:clean(req.body.tvgName,500),logo:clean(req.body.logo,5000),user_agent:clean(req.body.userAgent,1000),referrer:clean(req.body.referrer,5000),enabled:req.body.enabled!==false,updated_at:coreNow()});p.updated_at=coreNow();writeStore(s);res.json(c)});
+app.post('/api/channels/bulk',(req,res)=>{const a=requireAuth(req,res);if(!a)return;const s=a.store,ids=new Set((Array.isArray(req.body.ids)?req.body.ids:[]).map(String)),allowed=new Set(s.playlists.filter(p=>String(p.user_id)===String(a.user.id)).map(p=>String(p.id)));let count=0;if(req.body.action==='delete'){const before=s.channels.length;s.channels=s.channels.filter(c=>!(ids.has(String(c.id))&&allowed.has(String(c.playlist_id))));count=before-s.channels.length}else if(['enable','disable'].includes(req.body.action)){for(const c of s.channels)if(ids.has(String(c.id))&&allowed.has(String(c.playlist_id))){c.enabled=req.body.action==='enable';c.updated_at=coreNow();count++}}else return res.status(400).json({error:'Unknown bulk action'});writeStore(s);res.json({ok:true,count})});
+app.post('/api/playlists/:id/reorder',(req,res)=>{const a=requireAuth(req,res);if(!a)return;const s=a.store,p=coreOwnPlaylist(s,req.params.id,a.user.id);if(!p)return res.status(404).json({error:'Playlist not found'});const pos=new Map((Array.isArray(req.body.ids)?req.body.ids:[]).map((id,i)=>[String(id),i]));for(const c of s.channels)if(String(c.playlist_id)===String(p.id)&&pos.has(String(c.id)))c.sort_order=pos.get(String(c.id));p.updated_at=coreNow();writeStore(s);res.json({ok:true})});
