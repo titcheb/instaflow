@@ -1,7 +1,7 @@
 /* NEXA responsive layer */
 html,body{max-width:100%;overflow-x:hidden}.main,.content,.panel,.glass,.editor-grid,.channel-panel,.groups-panel{min-width:0;max-width:100%}
 
-@media(max-width:800px){
+@media(max-width:800px),(max-device-width:800px){
   html,body{width:100%;overflow-x:hidden!important}
   .app-view,body.nexa-sidebar-collapsed .app-view{display:block!important;min-height:100vh}
 
@@ -140,7 +140,7 @@ html,body{max-width:100%;overflow-x:hidden}.main,.content,.panel,.glass,.editor-
   button,.primary,.ghost,.tiny,.icon-btn{touch-action:manipulation}
 }
 
-@media(max-width:480px){
+@media(max-width:480px),(max-device-width:480px){
   .main,body.nexa-sidebar-collapsed .main{padding-left:72px!important;padding-right:8px!important}
   .stats-grid,#adminView .stats-grid{grid-template-columns:1fr!important}
   .header-actions{grid-template-columns:1fr!important}
