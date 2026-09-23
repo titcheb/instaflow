@@ -1,12 +1,12 @@
 {
   "name": "nexa-iptv-editor",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "private": true,
   "type": "module",
   "scripts": {
     "prepare:gateway": "cat gateway-a.jsfrag gateway-b.jsfrag gateway-preview.jsfrag gateway-c.jsfrag > gateway-runtime.js",
     "start": "npm run prepare:gateway && node gateway-runtime.js",
-    "check": "npm run prepare:gateway && node --check gateway-runtime.js && node --check server.js && node --check public/app.js && node --check public/admin.js && node --check public/import-preview.js && node --check public/features.js && node --check public/session-fix.js"
+    "check": "npm run prepare:gateway && node --check gateway-runtime.js && node --check server.js && node --check public/app.js && node --check public/admin.js && node --check public/import-preview.js && node --check public/features.js && node --check public/session-fix.js && node --check public/sidebar-ui.js"
   },
   "engines": { "node": ">=20" },
   "dependencies": {
