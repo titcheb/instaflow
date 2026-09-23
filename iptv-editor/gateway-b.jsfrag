@@ -1,8 +1,8 @@
 const BASE=fs.readFileSync(path.join(__dirname,'public','index.html'),'utf8');
-const HTML=BASE.replace('</head>','<link rel="stylesheet" href="/admin.css" /><link rel="stylesheet" href="/features.css" /></head>').replace('</body>','<script src="/admin.js" defer></script><script src="/import-preview.js" defer></script><script src="/features.js" defer></script></body>');
+const HTML=BASE.replace('</head>','<link rel="stylesheet" href="/admin.css" /><link rel="stylesheet" href="/features.css" /></head>').replace('</body>','<script src="/session-fix.js" defer></script><script src="/admin.js" defer></script><script src="/import-preview.js" defer></script><script src="/features.js" defer></script></body>');
 app.use(express.json({limit:'30mb'}));
-app.get('/',(req,res)=>res.type('html').send(HTML));
-app.use(express.static(path.join(__dirname,'public'),{index:false,etag:true,maxAge:'5m'}));
+app.get('/',(req,res)=>{res.set('Cache-Control','no-store, no-cache, must-revalidate');res.type('html').send(HTML)});
+app.use(express.static(path.join(__dirname,'public'),{index:false,etag:false,maxAge:0,setHeaders:res=>res.setHeader('Cache-Control','no-store, no-cache, must-revalidate')}));
 
 const clean=(s,max=5000)=>String(s??'').trim().slice(0,max);
 function next(s,k){const n=s.seq[k]||1;s.seq[k]=n+1;return n}
