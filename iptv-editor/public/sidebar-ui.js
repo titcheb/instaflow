@@ -62,7 +62,6 @@
     sidebar.dataset.nexaMenu='1';
     const originalDashboard=document.querySelector('[data-nav="dashboard"]');
     const playlistNav=$('playlistNav');
-    const adminNav=$('adminNav');
 
     const sideTop=sidebar.querySelector('.side-top');
     if(sideTop&&!$('nexaCollapseBtn')){
@@ -108,7 +107,12 @@
     const movies=makeButton({icon:icons.movies,label:'Movies',cls:'nexa-top-item',soon:true});movies.onclick=()=>toast('Movies editor is next module');
     const series=makeButton({icon:icons.series,label:'TV series',cls:'nexa-top-item',soon:true});series.onclick=()=>toast('TV series editor is next module');
     const users=makeButton({icon:icons.users,label:'User management',cls:'nexa-top-item'});
-    users.onclick=()=>{document.body.classList.remove('nexa-category-mode');const a=$('adminNav')||adminNav;if(a&&!a.classList.contains('hidden')){a.click();closeMobile()}else toast('Admin access required')};
+    users.onclick=async()=>{
+      document.body.classList.remove('nexa-category-mode');
+      if(!window.NexaAdmin?.open){toast('Admin panel is still loading. Try again.');return}
+      const opened=await window.NexaAdmin.open();
+      if(opened){document.querySelectorAll('.nexa-menu-item').forEach(x=>x.classList.remove('active'));users.classList.add('active');closeMobile()}
+    };
     const auto=makeButton({icon:icons.auto,label:'Auto updater',cls:'nexa-top-item',soon:true});auto.onclick=()=>toast('Scheduled auto updater is next module');
     const player=makeButton({icon:icons.player,label:'IPTV Web Player',cls:'nexa-top-item'});player.onclick=()=>window.open('https://nexa-iptv-player.onrender.com','_blank','noopener');
     nav.append(movies,series,users,auto,player);
@@ -116,15 +120,15 @@
     const bottom=sidebar.querySelector('.sidebar-bottom');
     if(bottom&&!$('nexaThemeRow')){
       const row=document.createElement('label');row.id='nexaThemeRow';row.className='nexa-theme-row';row.innerHTML='<span id="nexaThemeLabel">NIGHT MODE</span><input id="nexaNightToggle" type="checkbox"><i></i>';
-      const version=document.createElement('div');version.className='nexa-version';version.textContent='V1.4.1';
+      const version=document.createElement('div');version.className='nexa-version';version.textContent='V1.4.2';
       bottom.insertAdjacentElement('afterbegin',version);bottom.insertAdjacentElement('afterbegin',row);
       $('nexaNightToggle').addEventListener('change',e=>setTheme(e.target.checked));
     }
 
     new MutationObserver(hideNativeAdmin).observe(nav,{childList:true,subtree:true});hideNativeAdmin();
     document.addEventListener('click',e=>{
-      if(e.target.closest('[data-playlist]')){showBasicMode(basic);channelsBtn.classList.add('active')}
-      if(e.target.closest('[data-nav="dashboard"]'))document.body.classList.remove('nexa-category-mode');
+      if(e.target.closest('[data-playlist]')){showBasicMode(basic);channelsBtn.classList.add('active');users.classList.remove('active')}
+      if(e.target.closest('[data-nav="dashboard"]')){document.body.classList.remove('nexa-category-mode');users.classList.remove('active')}
     });
     const saved=localStorage.getItem('nexa_night_mode');setTheme(saved===null?false:saved==='1');
     setSidebarCollapsed(localStorage.getItem(COLLAPSE_KEY)==='1');
