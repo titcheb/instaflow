@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createClient } from 'redis';
+import { gzipSync, gunzipSync } from 'zlib';
 
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR=path.join(__dirname,'data');
@@ -29,10 +30,28 @@ function writeLocal(store){
   fs.renameSync(tmp,DATA_FILE);
 }
 
+function encodeStore(store){
+  const raw=Buffer.from(JSON.stringify(store),'utf8');
+  const gz=gzipSync(raw,{level:6});
+  return {payload:'gz:'+gz.toString('base64'),rawBytes:raw.length,storedBytes:gz.length};
+}
+
+function decodeStore(payload){
+  if(!payload)return null;
+  if(payload.startsWith('gz:')){
+    const buf=Buffer.from(payload.slice(3),'base64');
+    return JSON.parse(gunzipSync(buf).toString('utf8'));
+  }
+  return JSON.parse(payload);
+}
+
 async function pushRemote(store){
   if(!ready||!client?.isOpen)return;
-  const payload=JSON.stringify(store);
-  lastWrite=lastWrite.catch(()=>{}).then(()=>client.set(REDIS_KEY,payload));
+  const encoded=encodeStore(store);
+  lastWrite=lastWrite.catch(()=>{}).then(async()=>{
+    await client.set(REDIS_KEY,encoded.payload);
+    console.log(`[storage] saved compressed state: ${store.users?.length||0} users, ${store.playlists?.length||0} playlists, ${store.channels?.length||0} channels, ${(encoded.rawBytes/1048576).toFixed(1)}MB -> ${(encoded.storedBytes/1048576).toFixed(1)}MB`);
+  });
   await lastWrite;
 }
 
@@ -55,10 +74,11 @@ export async function initStorage(){
   const remote=await client.get(REDIS_KEY);
   if(remote){
     try{
-      const parsed=JSON.parse(remote);
+      const parsed=decodeStore(remote);
       if(parsed&&typeof parsed==='object'){
         writeLocal(parsed);
-        console.log(`[storage] restored remote state: ${parsed.users?.length||0} users, ${parsed.playlists?.length||0} playlists, ${parsed.channels?.length||0} channels`);
+        console.log(`[storage] restored remote state: ${parsed.users?.length||0} users, ${parsed.playlists?.length||0} playlists, ${parsed.channels?.length||0} channels${remote.startsWith('gz:')?' (compressed)':''}`);
+        if(!remote.startsWith('gz:'))void pushRemote(parsed).catch(e=>console.error('[storage] compression migration failed:',e.message));
         return;
       }
     }catch(e){console.error('[storage] invalid remote state:',e.message)}
